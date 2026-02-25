@@ -12,3 +12,4 @@ next-env.d.ts
 backend/immich-places-backend
 .wip
 immich-openapi-specs.json
+.sg
