@@ -1,0 +1,124 @@
+@import 'tailwindcss';
+
+@layer base {
+	:root {
+		--color-bg: #f8f9fa;
+		--color-surface: #ffffff;
+		--color-text: #1a1a1a;
+		--color-text-secondary: #6b7280;
+		--color-border: #e5e7eb;
+		--color-primary: #216142;
+		--color-hover: #f3f4f6;
+		--color-selected: #eef2ff;
+		--app-sidebar-width: 30rem;
+	}
+
+	html,
+	body {
+		height: 100%;
+		overflow: hidden;
+	}
+
+	body {
+		font-family:
+			var(--font-geist-sans),
+			system-ui,
+			-apple-system,
+			sans-serif;
+		color: var(--color-text);
+		background: var(--color-bg);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+@keyframes placeSearchSpin {
+	to {
+		transform: translateY(-50%) rotate(360deg);
+	}
+}
+
+@keyframes fadeInMenu {
+	from {
+		opacity: 0;
+		transform: scale(0.96);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes elFadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes titleSwap {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes emptyPulse {
+	0%,
+	100% {
+		r: 2.5;
+		opacity: 0.5;
+	}
+	50% {
+		r: 3.5;
+		opacity: 1;
+	}
+}
+
+@keyframes emptySlowSpin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@utility animate-fade-in {
+	animation: fadeIn 300ms ease-out both;
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+.leaflet-container {
+	background: var(--color-bg);
+}
+
+.leaflet-container img {
+	max-width: none !important;
+	max-height: none !important;
+}
+
+.leaflet-control-attribution {
+	font-size: 9px;
+}

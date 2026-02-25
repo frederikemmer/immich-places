@@ -1,0 +1,84 @@
+'use client';
+
+import {useCallback, useState} from 'react';
+
+import {useLocationAssignment} from '@/features/selection/useLocationAssignment';
+
+import type {TSelectionController} from '@/shared/types/context';
+
+/**
+ * Dependencies for building a selection controller instance.
+ */
+type TSelectionControllerArgs = {
+	onAssetSavedAction: (assetID: string) => void;
+	onBatchSavedAction: () => Promise<void>;
+};
+
+/** Re-exports shared controller type from context contract. */
+export type {TSelectionController} from '@/shared/types/context';
+
+/**
+ * Compose selection workflows and expose controller-ready state/actions.
+ *
+ * Bridges save callbacks into location assignment and tracks a map-marker refresh
+ * version token after batch saves.
+ *
+ * @param args - Save callbacks from higher-level orchestration.
+ * @returns Normalized selection controller object for application context.
+ */
+export function useSelectionController({
+	onAssetSavedAction,
+	onBatchSavedAction
+}: TSelectionControllerArgs): TSelectionController {
+	const [mapMarkersVersion, setMapMarkersVersion] = useState(0);
+
+	const handleSaved = useCallback(
+		(assetID: string) => {
+			onAssetSavedAction(assetID);
+		},
+		[onAssetSavedAction]
+	);
+
+	const handleBatchSaved = useCallback(async () => {
+		await onBatchSavedAction();
+		setMapMarkersVersion(v => v + 1);
+	}, [onBatchSavedAction]);
+
+	const {
+		selectedAssets,
+		pendingLocation,
+		pendingLocationsByAssetID,
+		savedLocationsByAssetID,
+		isSaving,
+		error: saveError,
+		toggleAssetAction,
+		shiftSelectAction,
+		selectAllAction,
+		clearSelectionAction,
+		clearSavedLocationsAction,
+		setLocationAction,
+		clearLocationAction,
+		saveAction
+	} = useLocationAssignment(handleSaved, handleBatchSaved);
+
+	const bumpMapMarkers = useCallback(() => setMapMarkersVersion(v => v + 1), []);
+
+	return {
+		selectedAssets,
+		pendingLocation,
+		pendingLocationsByAssetID,
+		savedLocationsByAssetID,
+		isSaving,
+		saveError,
+		toggleAssetAction,
+		shiftSelectAction,
+		selectAllAction,
+		clearSelectionAction,
+		clearSavedLocationsAction,
+		setLocationAction,
+		clearLocationAction,
+		saveAction,
+		mapMarkersVersion,
+		bumpMapMarkers
+	};
+}

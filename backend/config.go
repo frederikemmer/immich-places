@@ -1,0 +1,43 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
+)
+
+type Config struct {
+	ImmichURL           string `env:"IMMICH_URL,notEmpty"`
+	ImmichExternalURL   string `env:"IMMICH_EXTERNAL_URL"`
+	Port                int    `env:"PORT" envDefault:"8082"`
+	DataDir             string `env:"DATA_DIR" envDefault:"/data"`
+	SyncIntervalMS      int    `env:"SYNC_INTERVAL_MS" envDefault:"300000"`
+	TrustProxyTLS       bool   `env:"TRUST_PROXY_TLS" envDefault:"true"`
+	AllowInsecure       bool   `env:"ALLOW_INSECURE" envDefault:"false"`
+	RegistrationEnabled bool   `env:"REGISTRATION_ENABLED" envDefault:"true"`
+	EncryptionKey       string `env:"ENCRYPTION_KEY,notEmpty"`
+}
+
+func loadConfig() (*Config, error) {
+	godotenv.Load()
+
+	cfg, err := env.ParseAs[Config]()
+	if err != nil {
+		return nil, err
+	}
+
+	if cfg.ImmichExternalURL == "" {
+		cfg.ImmichExternalURL = cfg.ImmichURL
+	}
+
+	if cfg.SyncIntervalMS <= 0 {
+		return nil, fmt.Errorf("SYNC_INTERVAL_MS must be > 0, got %d", cfg.SyncIntervalMS)
+	}
+
+	if !cfg.TrustProxyTLS && !cfg.AllowInsecure {
+		return nil, fmt.Errorf("TRUST_PROXY_TLS is false and no TLS is configured; set ALLOW_INSECURE=true to run without TLS")
+	}
+
+	return &cfg, nil
+}

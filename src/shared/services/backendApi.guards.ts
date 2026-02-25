@@ -1,0 +1,191 @@
+import {isFiniteNumber, isNullableFiniteNumber, isNullableString, isRecord, isString} from '@/utils/typeGuards';
+
+import type {TAlbumRow} from '@/shared/types/album';
+import type {TAssetPageInfo, TPaginatedAssets} from '@/shared/types/asset';
+import type {THealthResponse} from '@/shared/types/health';
+import type {TMapMarker} from '@/shared/types/map';
+import type {TLocationCluster, TRawSuggestionsResponse, TSuggestionsResponse} from '@/shared/types/suggestion';
+
+/**
+ * Shared internal row predicate for asset payload entries.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value matches the expected asset row structure.
+ */
+function isAssetRow(value: unknown): boolean {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return (
+		isString(value.immichID) &&
+		isString(value.type) &&
+		isString(value.originalFileName) &&
+		isString(value.fileCreatedAt) &&
+		isNullableFiniteNumber(value.latitude) &&
+		isNullableFiniteNumber(value.longitude) &&
+		isNullableString(value.city) &&
+		isNullableString(value.state) &&
+		isNullableString(value.country) &&
+		isNullableString(value.dateTimeOriginal) &&
+		isString(value.syncedAt) &&
+		(value.stackID === undefined || isNullableString(value.stackID)) &&
+		(value.stackPrimaryAssetID === undefined || isNullableString(value.stackPrimaryAssetID)) &&
+		(value.stackAssetCount === undefined || isNullableFiniteNumber(value.stackAssetCount))
+	);
+}
+
+/**
+ * Type guard for paginated asset payloads.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value matches `TPaginatedAssets`.
+ */
+export function isPaginatedAssets(value: unknown): value is TPaginatedAssets {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return (
+		Array.isArray(value.items) &&
+		value.items.every(isAssetRow) &&
+		isFiniteNumber(value.total) &&
+		isFiniteNumber(value.page) &&
+		isFiniteNumber(value.pageSize) &&
+		typeof value.hasNextPage === 'boolean'
+	);
+}
+
+export function isTLocationCluster(value: unknown): value is TLocationCluster {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return (
+		isFiniteNumber(value.latitude) &&
+		isFiniteNumber(value.longitude) &&
+		isString(value.label) &&
+		isFiniteNumber(value.count)
+	);
+}
+
+/**
+ * Type guard for suggestion response payloads.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value matches `TSuggestionsResponse`.
+ */
+export function isTSuggestionsResponse(value: unknown): value is TSuggestionsResponse {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return (
+		Array.isArray(value.sameDayClusters) &&
+		value.sameDayClusters.every(isTLocationCluster) &&
+		Array.isArray(value.twoDayClusters) &&
+		value.twoDayClusters.every(isTLocationCluster) &&
+		Array.isArray(value.weeklyClusters) &&
+		value.weeklyClusters.every(isTLocationCluster) &&
+		Array.isArray(value.frequentLocations) &&
+		value.frequentLocations.every(isTLocationCluster) &&
+		Array.isArray(value.albumClusters) &&
+		value.albumClusters.every(isTLocationCluster)
+	);
+}
+
+function isNullableLocationClusterArray(value: unknown): value is TLocationCluster[] | null {
+	return value === null || (Array.isArray(value) && value.every(isTLocationCluster));
+}
+
+/**
+ * Type guard for backend suggestion payloads before normalization.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value matches optional null-aware suggestion response shape.
+ */
+export function isTRawSuggestionsResponse(value: unknown): value is TRawSuggestionsResponse {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return (
+		isNullableLocationClusterArray(value.sameDayClusters) &&
+		isNullableLocationClusterArray(value.twoDayClusters) &&
+		isNullableLocationClusterArray(value.weeklyClusters) &&
+		isNullableLocationClusterArray(value.frequentLocations) &&
+		isNullableLocationClusterArray(value.albumClusters)
+	);
+}
+
+/**
+ * Type guard for album row payloads.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value matches `TAlbumRow`.
+ */
+export function isAlbumRow(value: unknown): value is TAlbumRow {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return (
+		isString(value.immichID) &&
+		isString(value.albumName) &&
+		isNullableString(value.thumbnailAssetID) &&
+		isFiniteNumber(value.assetCount) &&
+		isFiniteNumber(value.filteredCount) &&
+		isFiniteNumber(value.noGPSCount) &&
+		isString(value.updatedAt) &&
+		isNullableString(value.startDate)
+	);
+}
+
+/**
+ * Type guard for map marker payloads.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value matches `TMapMarker`.
+ */
+export function isMapMarker(value: unknown): value is TMapMarker {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return isString(value.immichID) && isFiniteNumber(value.latitude) && isFiniteNumber(value.longitude);
+}
+
+/**
+ * Type guard for health response payloads.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value matches `THealthResponse`.
+ */
+export function isHealthResponse(value: unknown): value is THealthResponse {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return (
+		isString(value.status) &&
+		isFiniteNumber(value.syncedAssets) &&
+		isFiniteNumber(value.noGPSAssets) &&
+		isNullableString(value.lastSyncAt) &&
+		isString(value.immichURL)
+	);
+}
+
+/**
+ * Type guard for asset page info payloads.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value matches `TAssetPageInfo`.
+ */
+export function isAssetPageInfo(value: unknown): value is TAssetPageInfo {
+	if (!isRecord(value)) {
+		return false;
+	}
+	return isFiniteNumber(value.page) && isNullableString(value.albumID);
+}
+
+/**
+ * Type guard for sync status payloads.
+ *
+ * @param value - Unknown input value.
+ * @returns `true` when value has a boolean `syncing` field.
+ */
+export function isSyncStatus(value: unknown): value is {syncing: boolean} {
+	return isRecord(value) && typeof value.syncing === 'boolean';
+}

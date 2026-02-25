@@ -1,0 +1,43 @@
+{
+	"name": "immich-places",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start",
+		"lint": "eslint ."
+	},
+	"dependencies": {
+		"@radix-ui/react-context-menu": "^2.2.16",
+		"geist": "^1.7.0",
+		"leaflet": "^1.9.4",
+		"leaflet.markercluster": "^1.5.3",
+		"leaflet.markercluster.placementstrategies": "^0.1.3",
+		"next": "16.1.6",
+		"react": "19.2.3",
+		"react-dom": "19.2.3"
+	},
+	"devDependencies": {
+		"@next/eslint-plugin-next": "16.1.6",
+		"@tailwindcss/postcss": "^4.2.1",
+		"@types/leaflet": "^1.9.21",
+		"@types/leaflet.markercluster": "^1.5.6",
+		"@types/node": "^20",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"@typescript-eslint/eslint-plugin": "^8.41.0",
+		"@typescript-eslint/parser": "^8.41.0",
+		"eslint": "^9.22.0",
+		"eslint-config-next": "16.1.6",
+		"eslint-config-prettier": "^10.1.8",
+		"eslint-import-resolver-typescript": "^4.4.4",
+		"eslint-plugin-import": "^2.32.0",
+		"eslint-plugin-react": "^7.37.5",
+		"eslint-plugin-react-hooks": "^5.2.0",
+		"eslint-plugin-tsdoc": "^0.5.0",
+		"eslint-plugin-unused-imports": "^4.2.0",
+		"tailwindcss": "^4.2.1",
+		"typescript": "^5"
+	}
+}

@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+.env
+.env.local
+backend/.env
+*.tsbuildinfo
+next-env.d.ts
+*.db
+*.db-wal
+*.db-shm
+backend/immich-places-backend
+.wip
+immich-openapi-specs.json
