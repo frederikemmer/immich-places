@@ -532,8 +532,25 @@ func (d *Database) bulkUpdateAssetLocation(ctx context.Context, userID string, i
 		"UPDATE assets SET latitude = ?, longitude = ?, syncedAt = datetime('now') WHERE userID = ? AND immichID IN (%s)",
 		strings.Join(placeholders, ","),
 	)
-	_, err := d.db.ExecContext(ctx, query, args...)
-	return err
+	if _, err := d.db.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+
+	// Refresh cached GPS counts for any albums that contain the updated assets.
+	// If this step fails the location update has already been persisted; stale counts
+	// are acceptable — they will be corrected at the next sync.
+	albumIDs, err := d.getAlbumIDsForAssets(ctx, userID, immichIDs)
+	if err != nil {
+		log.Printf("bulkUpdateAssetLocation: failed to find affected albums for user %s: %v", userID, err)
+		return nil
+	}
+	for _, albumID := range albumIDs {
+		if err := d.refreshAlbumGPSCounts(ctx, userID, albumID); err != nil {
+			log.Printf("bulkUpdateAssetLocation: failed to refresh GPS counts for album %s: %v", albumID, err)
+		}
+	}
+
+	return nil
 }
 
 func (d *Database) isAssetInAlbum(ctx context.Context, userID, assetID, albumID string) (bool, error) {

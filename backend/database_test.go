@@ -163,6 +163,46 @@ func TestBulkUpdateAssetLocation(t *testing.T) {
 	}
 }
 
+func TestBulkUpdateAssetLocationRefreshesAlbumCounts(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Two assets without GPS in an album
+	seedAsset(t, db, "a1", nil, nil, "2024-01-01T12:00:00Z")
+	seedAsset(t, db, "a2", nil, nil, "2024-01-02T12:00:00Z")
+	db.upsertAlbum(ctx, testUserID, "album1", "Test", nil, 2, "2024-01-01T00:00:00Z", nil)
+	db.replaceAlbumAssets(ctx, testUserID, "album1", []string{"a1", "a2"})
+
+	// Verify initial cached counts: 0 GPS, 2 noGPS
+	albums, err := db.getAlbumsWithNoGPSCount(ctx, testUserID)
+	if err != nil {
+		t.Fatalf("getAlbumsWithNoGPSCount before update: %v", err)
+	}
+	if len(albums) != 1 || albums[0].NoGPSCount != 2 {
+		t.Fatalf("expected noGPSCount=2 before update, got %v", albums)
+	}
+
+	// Update location for both assets
+	if err := db.bulkUpdateAssetLocation(ctx, testUserID, []string{"a1", "a2"}, 51.5, -0.12); err != nil {
+		t.Fatalf("bulkUpdateAssetLocation: %v", err)
+	}
+
+	// Album GPS counts should be refreshed automatically
+	albums, err = db.getAlbumsWithGPSCount(ctx, testUserID)
+	if err != nil {
+		t.Fatalf("getAlbumsWithGPSCount after update: %v", err)
+	}
+	if len(albums) != 1 {
+		t.Fatalf("expected 1 album with GPS after update, got %d", len(albums))
+	}
+	if albums[0].FilteredCount != 2 {
+		t.Errorf("expected gpsCount=2, got %d", albums[0].FilteredCount)
+	}
+	if albums[0].NoGPSCount != 0 {
+		t.Errorf("expected noGPSCount=0, got %d", albums[0].NoGPSCount)
+	}
+}
+
 func TestGetAssetPageInfoNotFound(t *testing.T) {
 	db := newTestDB(t)
 

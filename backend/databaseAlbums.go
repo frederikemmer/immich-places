@@ -7,6 +7,28 @@ import (
 	"strings"
 )
 
+// refreshAlbumGPSCountsSQL updates the cached gpsCount and noGPSCount for a single album.
+// Args: userID, albumID (for gpsCount subquery), userID, albumID (for noGPSCount subquery), userID, albumID (WHERE clause).
+const refreshAlbumGPSCountsSQL = `
+UPDATE albums SET
+	gpsCount = (
+		SELECT COUNT(*)
+		FROM albumAssets aa
+		JOIN assets ast ON ast.userID = aa.userID AND ast.immichID = aa.assetID
+		WHERE aa.userID = ? AND aa.albumID = ?
+			AND ast.latitude IS NOT NULL AND ast.longitude IS NOT NULL
+			AND ast.stackPrimaryAssetID IS NULL
+	),
+	noGPSCount = (
+		SELECT COUNT(*)
+		FROM albumAssets aa
+		JOIN assets ast ON ast.userID = aa.userID AND ast.immichID = aa.assetID
+		WHERE aa.userID = ? AND aa.albumID = ?
+			AND (ast.latitude IS NULL OR ast.longitude IS NULL)
+			AND ast.stackPrimaryAssetID IS NULL
+	)
+WHERE userID = ? AND immichID = ?`
+
 func (d *Database) getAlbumUpdatedAt(ctx context.Context, userID, albumID string) (string, error) {
 	var updatedAt string
 	err := d.db.QueryRowContext(ctx, "SELECT updatedAt FROM albums WHERE userID = ? AND immichID = ?", userID, albumID).Scan(&updatedAt)
@@ -72,22 +94,25 @@ func (d *Database) replaceAlbumAssets(ctx context.Context, userID, albumID strin
 		return fmt.Errorf("insert new album assets: %w", err)
 	}
 
-	tx.ExecContext(ctx, "DROP TABLE IF EXISTS tmpDesiredAssets")
+	if _, err := tx.ExecContext(ctx, refreshAlbumGPSCountsSQL,
+		userID, albumID, userID, albumID, userID, albumID,
+	); err != nil {
+		return fmt.Errorf("refresh album GPS counts: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, "DROP TABLE IF EXISTS tmpDesiredAssets"); err != nil {
+		// Non-fatal: SQLite temp tables are session-scoped and will be cleaned up automatically.
+		_ = err
+	}
 	return tx.Commit()
 }
 
 func (d *Database) getAlbumsWithNoGPSCount(ctx context.Context, userID string) ([]AlbumRow, error) {
 	rows, err := d.db.QueryContext(ctx,
-		`SELECT a.immichID, a.albumName, a.thumbnailAssetID, a.assetCount, a.updatedAt, a.startDate,
-			COUNT(CASE WHEN ast.immichID IS NOT NULL
-				AND (ast.latitude IS NULL OR ast.longitude IS NULL)
-				AND ast.stackPrimaryAssetID IS NULL THEN 1 END) as filteredCount
-		FROM albums a
-		LEFT JOIN albumAssets aa ON aa.userID = a.userID AND aa.albumID = a.immichID
-		LEFT JOIN assets ast ON ast.userID = a.userID AND ast.immichID = aa.assetID
-		WHERE a.userID = ?
-		GROUP BY a.immichID
-		ORDER BY a.startDate DESC`,
+		`SELECT immichID, albumName, thumbnailAssetID, assetCount, updatedAt, startDate, noGPSCount
+		FROM albums
+		WHERE userID = ?
+		ORDER BY startDate DESC`,
 		userID,
 	)
 	if err != nil {
@@ -98,10 +123,10 @@ func (d *Database) getAlbumsWithNoGPSCount(ctx context.Context, userID string) (
 	var albums []AlbumRow
 	for rows.Next() {
 		var a AlbumRow
-		if err := rows.Scan(&a.ImmichID, &a.AlbumName, &a.ThumbnailAssetID, &a.AssetCount, &a.UpdatedAt, &a.StartDate, &a.FilteredCount); err != nil {
+		if err := rows.Scan(&a.ImmichID, &a.AlbumName, &a.ThumbnailAssetID, &a.AssetCount, &a.UpdatedAt, &a.StartDate, &a.NoGPSCount); err != nil {
 			return nil, err
 		}
-		a.NoGPSCount = a.FilteredCount
+		a.FilteredCount = a.NoGPSCount
 		albums = append(albums, a)
 	}
 	return albums, rows.Err()
@@ -109,18 +134,10 @@ func (d *Database) getAlbumsWithNoGPSCount(ctx context.Context, userID string) (
 
 func (d *Database) getAlbumsWithGPSCount(ctx context.Context, userID string) ([]AlbumRow, error) {
 	rows, err := d.db.QueryContext(ctx,
-		`SELECT a.immichID, a.albumName, a.thumbnailAssetID, a.assetCount, a.updatedAt, a.startDate,
-			COUNT(CASE WHEN ast.latitude IS NOT NULL AND ast.longitude IS NOT NULL
-				AND ast.stackPrimaryAssetID IS NULL THEN 1 END) as filteredCount,
-			COUNT(CASE WHEN (ast.latitude IS NULL OR ast.longitude IS NULL)
-				AND ast.stackPrimaryAssetID IS NULL THEN 1 END) as noGPSCount
-		FROM albums a
-		JOIN albumAssets aa ON aa.userID = a.userID AND aa.albumID = a.immichID
-		JOIN assets ast ON ast.userID = a.userID AND ast.immichID = aa.assetID
-		WHERE a.userID = ?
-		GROUP BY a.immichID
-		HAVING filteredCount > 0
-		ORDER BY a.startDate DESC`,
+		`SELECT immichID, albumName, thumbnailAssetID, assetCount, updatedAt, startDate, gpsCount, noGPSCount
+		FROM albums
+		WHERE userID = ? AND gpsCount > 0
+		ORDER BY startDate DESC`,
 		userID,
 	)
 	if err != nil {
@@ -178,6 +195,48 @@ func (d *Database) deleteAlbumsNotIn(ctx context.Context, userID string, albumID
 
 	tx.ExecContext(ctx, "DROP TABLE IF EXISTS tmpKeepAlbums")
 	return tx.Commit()
+}
+
+// refreshAlbumGPSCounts recomputes and stores the cached gpsCount and noGPSCount for an album.
+func (d *Database) refreshAlbumGPSCounts(ctx context.Context, userID, albumID string) error {
+	_, err := d.db.ExecContext(ctx, refreshAlbumGPSCountsSQL,
+		userID, albumID, userID, albumID, userID, albumID,
+	)
+	return err
+}
+
+// getAlbumIDsForAssets returns the distinct album IDs that contain any of the given asset IDs.
+func (d *Database) getAlbumIDsForAssets(ctx context.Context, userID string, assetIDs []string) ([]string, error) {
+	if len(assetIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(assetIDs))
+	args := []interface{}{userID}
+	for i, id := range assetIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	query := fmt.Sprintf(
+		"SELECT DISTINCT albumID FROM albumAssets WHERE userID = ? AND assetID IN (%s)",
+		strings.Join(placeholders, ","),
+	)
+	rows, err := d.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func bulkInsertTemp(ctx context.Context, tx *sql.Tx, tableName string, values []string) error {
