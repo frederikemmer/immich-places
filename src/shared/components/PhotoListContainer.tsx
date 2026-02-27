@@ -27,6 +27,8 @@ export function PhotoListContainer(): ReactElement {
 		setPageSizeAction,
 		gridColumns,
 		setGridColumnsAction,
+		visibleMarkerLimit,
+		setVisibleMarkerLimitAction,
 		viewMode,
 		setViewModeAction,
 		selectedAlbumID,
@@ -44,7 +46,7 @@ export function PhotoListContainer(): ReactElement {
 		loadPageAction
 	} = useCatalog();
 	const {clearSelectionAction, selectedAssets, pendingLocation, pendingLocationsByAssetID} = useSelection();
-	const {closeLightboxAction} = useUIMap();
+	const {closeLightboxAction, visibleMarkerTotalCount, isVisibleMarkerTotalCountStale} = useUIMap();
 
 	const selectedAlbum = useMemo<TAlbumRow | null>(
 		() => albums.find(album => album.immichID === selectedAlbumID) ?? null,
@@ -141,6 +143,9 @@ export function PhotoListContainer(): ReactElement {
 				gpsFilter,
 				pageSize,
 				gridColumns,
+				visibleMarkerLimit,
+				visibleMarkerTotalCount,
+				isVisibleMarkerTotalCountStale,
 				viewMode,
 				selectedAlbumID,
 				selectedAlbum,
@@ -148,6 +153,7 @@ export function PhotoListContainer(): ReactElement {
 				onGPSFilterAction: setGPSFilterAction,
 				onPageSizeAction: setPageSizeAction,
 				onGridColumnsAction: setGridColumnsAction,
+				onVisibleMarkerLimitAction: setVisibleMarkerLimitAction,
 				onViewModeAction: handleToggleViewMode,
 				onBackToAlbumsAction: handleBackToAlbums,
 				trailingAction: <UserMenu />

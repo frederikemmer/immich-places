@@ -37,6 +37,9 @@ type TPhotoListProps = {
 		gpsFilter: TGPSFilter;
 		pageSize: number;
 		gridColumns: number;
+		visibleMarkerLimit: number;
+		visibleMarkerTotalCount: number | null;
+		isVisibleMarkerTotalCountStale: boolean;
 		viewMode: TViewMode;
 		selectedAlbumID: string | null;
 		selectedAlbum: TAlbumRow | null;
@@ -44,6 +47,7 @@ type TPhotoListProps = {
 		onGPSFilterAction: (filter: TGPSFilter) => void;
 		onPageSizeAction: (size: number) => void;
 		onGridColumnsAction: (cols: number) => void;
+		onVisibleMarkerLimitAction: (limit: number) => void;
 		onViewModeAction: (mode: TViewMode) => void;
 		onBackToAlbumsAction: () => void;
 		trailingAction?: ReactElement;
@@ -118,12 +122,16 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 		gpsFilter,
 		pageSize,
 		gridColumns,
+		visibleMarkerLimit,
+		visibleMarkerTotalCount,
+		isVisibleMarkerTotalCountStale,
 		viewMode,
 		selectedAlbumID,
 		selectedAlbum,
 		onGPSFilterAction,
 		onPageSizeAction,
 		onGridColumnsAction,
+		onVisibleMarkerLimitAction,
 		onViewModeAction,
 		onBackToAlbumsAction
 	} = view;
@@ -167,6 +175,10 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 				onPageSizeAction={onPageSizeAction}
 				gridColumns={gridColumns}
 				onGridColumnsAction={onGridColumnsAction}
+				visibleMarkerLimit={visibleMarkerLimit}
+				visibleMarkerTotalCount={visibleMarkerTotalCount}
+				isVisibleMarkerTotalCountStale={isVisibleMarkerTotalCountStale}
+				onVisibleMarkerLimitAction={onVisibleMarkerLimitAction}
 				viewMode={viewMode}
 				onViewModeAction={onViewModeAction}
 				isSyncing={isSyncing}
