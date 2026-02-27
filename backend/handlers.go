@@ -84,10 +84,37 @@ func requireImmichClient(r *http.Request, factory *ImmichClientFactory) (*Immich
 }
 
 func (h *Handlers) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, HealthResponse{
+	resp := HealthResponse{
 		Status:    "ok",
 		ImmichURL: h.immichExternalURL,
-	})
+	}
+
+	// Populate cached asset counts for the authenticated user if available.
+	// These are stored by the sync service and read in O(1) from syncState.
+	if user := getUserFromContext(r); user != nil {
+		ctx := r.Context()
+		if n, ok := getSyncStateInt(ctx, h.db, user.ID, "totalGPSAssets"); ok {
+			resp.SyncedAssets = n
+		}
+		if n, ok := getSyncStateInt(ctx, h.db, user.ID, "totalNoGPSAssets"); ok {
+			resp.NoGPSAssets = n
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// getSyncStateInt reads an integer value from syncState, returning (0, false) on any error.
+func getSyncStateInt(ctx context.Context, db HandlerStore, userID, key string) (int, bool) {
+	v, err := db.getSyncState(ctx, userID, key)
+	if err != nil || v == nil {
+		return 0, false
+	}
+	n, parseErr := strconv.Atoi(*v)
+	if parseErr != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 func (h *Handlers) handleGetAssets(w http.ResponseWriter, r *http.Request) {

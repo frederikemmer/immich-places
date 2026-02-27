@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,6 +50,18 @@ func newDatabase(dataDir string, encryptionKey string) (*Database, error) {
 	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
 		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
+	// Use 64 MB page cache (default is only 2 MB, too small for large libraries).
+	if _, err := db.Exec("PRAGMA cache_size=-65536"); err != nil {
+		return nil, fmt.Errorf("failed to set cache size: %w", err)
+	}
+	// Keep temp tables in memory to avoid temp-file overhead.
+	if _, err := db.Exec("PRAGMA temp_store=MEMORY"); err != nil {
+		return nil, fmt.Errorf("failed to set temp store: %w", err)
+	}
+	// NORMAL is sufficient and safer for WAL mode (reduces fsync calls).
+	if _, err := db.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		return nil, fmt.Errorf("failed to set synchronous mode: %w", err)
+	}
 
 	if err := runMigrations(db); err != nil {
 		return nil, fmt.Errorf("migrations: %w", err)
@@ -89,6 +102,33 @@ func (d *Database) countAssets(ctx context.Context, userID string) (int, error) 
 	var count int
 	err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM assets WHERE userID = ?", userID).Scan(&count)
 	return count, err
+}
+
+// refreshAssetCountCache computes the current GPS and no-GPS asset totals for the
+// given user and stores them in syncState so that subsequent countFilteredAssets
+// calls can return in O(1) without scanning the assets table.
+func (d *Database) refreshAssetCountCache(ctx context.Context, userID string) error {
+	f := buildAssetFilter(userID, "", true)
+	var gpsCount int
+	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) "+f.fromClause, f.args...).Scan(&gpsCount); err != nil {
+		return fmt.Errorf("count GPS assets: %w", err)
+	}
+
+	var noGPSCount int
+	if err := d.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM assets WHERE userID = ? AND (latitude IS NULL OR longitude IS NULL) AND stackPrimaryAssetID IS NULL",
+		userID,
+	).Scan(&noGPSCount); err != nil {
+		return fmt.Errorf("count no-GPS assets: %w", err)
+	}
+
+	if err := d.setSyncState(ctx, userID, "totalGPSAssets", strconv.Itoa(gpsCount)); err != nil {
+		return fmt.Errorf("store GPS count: %w", err)
+	}
+	if err := d.setSyncState(ctx, userID, "totalNoGPSAssets", strconv.Itoa(noGPSCount)); err != nil {
+		return fmt.Errorf("store no-GPS count: %w", err)
+	}
+	return nil
 }
 
 func (d *Database) countNoGPSAssets(ctx context.Context, userID string) (int, error) {
@@ -157,6 +197,34 @@ func (d *Database) getFilteredAssets(ctx context.Context, userID, albumID string
 }
 
 func (d *Database) countFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool) (int, error) {
+	if albumID != "" {
+		// Fast path: use cached GPS counts stored in the album row.
+		col := "noGPSCount"
+		if withGPS {
+			col = "gpsCount"
+		}
+		var count int
+		if err := d.db.QueryRowContext(ctx,
+			"SELECT "+col+" FROM albums WHERE userID = ? AND immichID = ?",
+			userID, albumID,
+		).Scan(&count); err == nil {
+			return count, nil
+		}
+		// Album not found or column unavailable — fall through to live count.
+	} else {
+		// Fast path: use cached total counts stored in syncState.
+		key := "totalNoGPSAssets"
+		if withGPS {
+			key = "totalGPSAssets"
+		}
+		if v, err := d.getSyncState(ctx, userID, key); err == nil && v != nil {
+			if n, parseErr := strconv.Atoi(*v); parseErr == nil {
+				return n, nil
+			}
+		}
+		// Cache not yet populated — fall through to live count.
+	}
+
 	f := buildAssetFilter(userID, albumID, withGPS)
 	query := `SELECT COUNT(*) ` + f.fromClause
 
@@ -548,6 +616,11 @@ func (d *Database) bulkUpdateAssetLocation(ctx context.Context, userID string, i
 		if err := d.refreshAlbumGPSCounts(ctx, userID, albumID); err != nil {
 			log.Printf("bulkUpdateAssetLocation: failed to refresh GPS counts for album %s: %v", albumID, err)
 		}
+	}
+
+	// Refresh the cached timeline counts; moving assets from no-GPS to GPS changes totals.
+	if err := d.refreshAssetCountCache(ctx, userID); err != nil {
+		log.Printf("bulkUpdateAssetLocation: failed to refresh asset count cache for user %s: %v", userID, err)
 	}
 
 	return nil

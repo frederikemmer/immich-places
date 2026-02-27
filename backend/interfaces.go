@@ -17,6 +17,7 @@ type SyncStore interface {
 	upsertAlbum(ctx context.Context, userID, albumID, albumName string, thumbnailAssetID *string, assetCount int, updatedAt string, startDate *string) error
 	replaceAlbumAssets(ctx context.Context, userID, albumID string, assetIDs []string) error
 	deleteAlbumsNotIn(ctx context.Context, userID string, albumIDs []string) error
+	refreshAssetCountCache(ctx context.Context, userID string) error
 }
 
 type HandlerStore interface {

@@ -132,6 +132,11 @@ func (s *SyncService) doUserFullSync(ctx context.Context, userID string, immich 
 
 	s.syncStacks(ctx, userID, immich)
 	s.recomputeFrequentLocations(ctx, userID)
+
+	if err := s.db.refreshAssetCountCache(ctx, userID); err != nil {
+		log.Printf("failed to refresh asset count cache for user %s: %v", userID, err)
+	}
+
 	albumErr := s.syncAlbums(ctx, userID, immich)
 
 	if albumErr != nil {
@@ -182,6 +187,10 @@ func (s *SyncService) doUserIncrementalSync(ctx context.Context, userID string, 
 
 	if totalUpserted > 0 {
 		s.recomputeFrequentLocations(ctx, userID)
+	}
+
+	if err := s.db.refreshAssetCountCache(ctx, userID); err != nil {
+		log.Printf("failed to refresh asset count cache for user %s: %v", userID, err)
 	}
 
 	albumErr := s.syncAlbums(ctx, userID, immich)
