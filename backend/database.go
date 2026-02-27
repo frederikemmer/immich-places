@@ -15,7 +15,7 @@ import (
 
 const (
 	sqliteChunkSize = 500
-	maxMapMarkers   = 50000
+	maxMapMarkers   = 100000
 )
 
 const assetColumns = `immichID, type, originalFileName, fileCreatedAt, latitude, longitude,

@@ -23,7 +23,7 @@ export const DEFAULT_VISIBLE_MARKER_LIMIT = 10000;
 /** Minimum visible marker cap exposed in the UI. */
 export const VISIBLE_MARKER_LIMIT_MIN = 10000;
 /** Maximum visible marker cap exposed in the UI. */
-export const VISIBLE_MARKER_LIMIT_MAX = 50000;
+export const VISIBLE_MARKER_LIMIT_MAX = 100000;
 /** Increment used by marker-limit button options. */
 export const VISIBLE_MARKER_LIMIT_INCREMENT = 1000;
 
