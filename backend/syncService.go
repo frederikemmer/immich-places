@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -13,8 +15,10 @@ import (
 )
 
 const (
-	syncPageSize    = 1000
-	albumFetchLimit = 5
+	syncPageSize             = 1000
+	albumFetchLimit          = 5
+	cancelSyncWaitTimeout    = 5 * time.Second
+	cancelSyncPollIntervalMS = 10 * time.Millisecond
 )
 
 type SyncService struct {
@@ -46,16 +50,6 @@ func (s *SyncService) isUserSyncing(userID string) bool {
 	return s.userSyncing[userID]
 }
 
-func (s *SyncService) acquireUserSyncLock(userID string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.userSyncing[userID] {
-		return false
-	}
-	s.userSyncing[userID] = true
-	return true
-}
-
 func (s *SyncService) releaseUserSyncLock(userID string) {
 	s.mu.Lock()
 	s.userSyncing[userID] = false
@@ -79,21 +73,29 @@ func (s *SyncService) clearUserCancel(userID string) {
 	s.mu.Unlock()
 }
 
-func (s *SyncService) cancelUserSync(userID string) {
+func (s *SyncService) cancelUserSync(userID string) bool {
+	return s.cancelUserSyncWithTimeout(userID, cancelSyncWaitTimeout)
+}
+
+func (s *SyncService) cancelUserSyncWithTimeout(userID string, waitTimeout time.Duration) bool {
 	s.mu.Lock()
 	cancel := s.userCancels[userID]
 	s.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
+	deadline := time.Now().Add(waitTimeout)
 	for {
 		s.mu.Lock()
 		syncing := s.userSyncing[userID]
 		s.mu.Unlock()
 		if !syncing {
-			return
+			return true
 		}
-		time.Sleep(10 * time.Millisecond)
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(cancelSyncPollIntervalMS)
 	}
 }
 
@@ -160,9 +162,13 @@ func (s *SyncService) doUserFullSync(ctx context.Context, userID string, immich 
 	}
 
 	s.syncStacks(ctx, userID, immich)
-	s.syncLibraries(ctx, userID, immich)
-	if err := s.db.setSyncState(ctx, userID, "libraryIDBackfillDone", "true"); err != nil {
-		log.Printf("Failed to set libraryIDBackfillDone for user %s: %v", userID, err)
+	if err := s.syncLibraries(ctx, userID, immich); err != nil {
+		log.Printf("Library sync failed during full sync for user %s: %v", userID, err)
+		s.db.deleteSyncState(ctx, userID, "libraryIDBackfillDone")
+	} else {
+		if err := s.db.setSyncState(ctx, userID, "libraryIDBackfillDone", "true"); err != nil {
+			log.Printf("Failed to set libraryIDBackfillDone for user %s: %v", userID, err)
+		}
 	}
 	s.recomputeFrequentLocations(ctx, userID)
 	albumErr := s.syncAlbums(ctx, userID, immich)
@@ -477,21 +483,28 @@ func (s *SyncService) syncLibraries(ctx context.Context, userID string, immich S
 	libraries, err := immich.getLibraries(apiCtx)
 	if err != nil {
 		log.Printf("Failed to fetch libraries for user %s (may require admin key): %v", userID, err)
-		s.db.setSyncState(ctx, userID, "hasLibraryAccess", "false")
+		var httpErr *ImmichHTTPError
+		if errors.As(err, &httpErr) && (httpErr.StatusCode == http.StatusUnauthorized || httpErr.StatusCode == http.StatusForbidden) {
+			if err := s.db.setSyncState(ctx, userID, "hasLibraryAccess", "false"); err != nil {
+				log.Printf("Failed to set hasLibraryAccess=false for user %s: %v", userID, err)
+			}
+		}
 		return fmt.Errorf("failed to fetch libraries: %w", err)
 	}
 
-	s.db.setSyncState(ctx, userID, "hasLibraryAccess", "true")
+	if err := s.db.setSyncState(ctx, userID, "hasLibraryAccess", "true"); err != nil {
+		log.Printf("Failed to set hasLibraryAccess=true for user %s: %v", userID, err)
+	}
 
 	libraryIDs := make([]string, 0, len(libraries))
 	for _, lib := range libraries {
 		libraryIDs = append(libraryIDs, lib.ID)
-		if err := s.db.upsertLibrary(ctx, lib.ID, lib.Name, lib.AssetCount); err != nil {
+		if err := s.db.upsertLibrary(ctx, userID, lib.ID, lib.Name, lib.AssetCount); err != nil {
 			log.Printf("Failed to upsert library %s for user %s: %v", lib.ID, userID, err)
 		}
 	}
 
-	if err := s.db.deleteLibrariesNotIn(ctx, libraryIDs); err != nil {
+	if err := s.db.deleteLibrariesNotIn(ctx, userID, libraryIDs); err != nil {
 		log.Printf("Failed to clean up stale libraries for user %s: %v", userID, err)
 	}
 

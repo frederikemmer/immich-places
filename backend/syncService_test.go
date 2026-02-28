@@ -385,6 +385,39 @@ func TestDoFullSync(t *testing.T) {
 	}
 }
 
+func TestDoFullSyncDoesNotMarkBackfillDoneWhenLibrarySyncFails(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	factory, immich := newMockImmichFactoryNoRetry(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/search/metadata":
+			json.NewEncoder(w).Encode(ImmichSearchResponse{
+				Assets: struct {
+					Items    []ImmichAssetResponse `json:"items"`
+					NextPage *string               `json:"nextPage"`
+				}{Items: []ImmichAssetResponse{}},
+			})
+		case r.URL.Path == "/api/stacks":
+			json.NewEncoder(w).Encode([]ImmichStackResponse{})
+		case r.URL.Path == "/api/libraries":
+			w.WriteHeader(http.StatusForbidden)
+		case r.URL.Path == "/api/albums":
+			json.NewEncoder(w).Encode([]ImmichAlbumResponse{})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	nom := newMockNominatimServer(t)
+	svc := newSyncService(db, factory, nom)
+
+	svc.doUserFullSync(ctx, testUserID, immich)
+
+	backfillDone, _ := db.getSyncState(ctx, testUserID, "libraryIDBackfillDone")
+	if backfillDone != nil {
+		t.Errorf("expected libraryIDBackfillDone to remain unset when library sync fails, got %v", backfillDone)
+	}
+}
+
 func TestDoIncrementalSyncFallsBackToFull(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
@@ -425,7 +458,8 @@ func TestDoIncrementalSyncForcesFullWhenBackfillNeeded(t *testing.T) {
 	svc := newSyncService(db, factory, nom)
 
 	db.setSyncState(ctx, testUserID, "lastSyncAt", "2024-01-01T00:00:00Z")
-	db.upsertLibrary(ctx, "lib1", "External", 10)
+	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
+	db.upsertLibrary(ctx, testUserID, "lib1", "External", 10)
 	seedAsset(t, db, "a-existing", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z")
 
 	svc.doUserIncrementalSync(ctx, testUserID, immich)
@@ -473,20 +507,21 @@ func TestRecordAndClearSyncError(t *testing.T) {
 	}
 }
 
-func TestAcquireReleaseSyncLock(t *testing.T) {
+func TestTryStartAndReleaseSyncLock(t *testing.T) {
 	factory, _ := newFullMockImmichFactory(t)
 	svc := newSyncService(newTestDB(t), factory, newNominatimClient())
 
-	if !svc.acquireUserSyncLock(testUserID) {
-		t.Error("expected first acquire to succeed")
+	if _, ok := svc.tryStartUserSync(testUserID, func() {}); !ok {
+		t.Error("expected first start to succeed")
 	}
-	if svc.acquireUserSyncLock(testUserID) {
-		t.Error("expected second acquire to fail")
+	if _, ok := svc.tryStartUserSync(testUserID, func() {}); ok {
+		t.Error("expected second start to fail")
 	}
 
 	svc.releaseUserSyncLock(testUserID)
-	if !svc.acquireUserSyncLock(testUserID) {
-		t.Error("expected acquire after release to succeed")
+	svc.clearUserCancel(testUserID)
+	if _, ok := svc.tryStartUserSync(testUserID, func() {}); !ok {
+		t.Error("expected start after release to succeed")
 	}
 }
 
@@ -515,6 +550,39 @@ func TestTryStartUserSyncStoresCancel(t *testing.T) {
 	storedCancel()
 	if !cancelWasCalled {
 		t.Error("expected stored cancel function to execute")
+	}
+}
+
+func TestCancelUserSyncTimesOut(t *testing.T) {
+	factory, _ := newFullMockImmichFactory(t)
+	svc := newSyncService(newTestDB(t), factory, newNominatimClient())
+	svc.mu.Lock()
+	svc.userSyncing[testUserID] = true
+	svc.mu.Unlock()
+
+	stopped := svc.cancelUserSyncWithTimeout(testUserID, 50*time.Millisecond)
+	if stopped {
+		t.Fatal("expected cancelUserSyncWithTimeout to return false when sync does not stop")
+	}
+}
+
+func TestCancelUserSyncWaitsForSyncToStop(t *testing.T) {
+	factory, _ := newFullMockImmichFactory(t)
+	svc := newSyncService(newTestDB(t), factory, newNominatimClient())
+	svc.mu.Lock()
+	svc.userSyncing[testUserID] = true
+	svc.userCancels[testUserID] = func() {
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			svc.releaseUserSyncLock(testUserID)
+			svc.clearUserCancel(testUserID)
+		}()
+	}
+	svc.mu.Unlock()
+
+	stopped := svc.cancelUserSyncWithTimeout(testUserID, 500*time.Millisecond)
+	if !stopped {
+		t.Fatal("expected cancelUserSyncWithTimeout to return true after sync stops")
 	}
 }
 
@@ -801,7 +869,7 @@ func TestSyncLibrariesDeletesStale(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 
-	db.upsertLibrary(ctx, "old-lib", "Old Library", 10)
+	db.upsertLibrary(ctx, testUserID, "old-lib", "Old Library", 10)
 
 	factory, immich := newMockImmichFactory(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/libraries" {
