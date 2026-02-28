@@ -41,9 +41,7 @@ export function useMapMarkers(
 	albumID?: string | null,
 	version = 0,
 	bounds?: TViewportBounds | null,
-	visibleMarkerLimit: number = DEFAULT_VISIBLE_MARKER_LIMIT,
-	setVisibleMarkerTotalCountAction?: (totalCount: number) => void,
-	markVisibleMarkerTotalCountStaleAction?: () => void
+	visibleMarkerLimit: number = DEFAULT_VISIBLE_MARKER_LIMIT
 ): TUseMapMarkersReturn {
 	const [mapMarkers, setMapMarkers] = useState<TMapMarker[]>([]);
 	const [error, setError] = useState<string | null>(null);
@@ -68,16 +66,13 @@ export function useMapMarkers(
 			const controller = new AbortController();
 			abortRef.current = controller;
 			try {
-				const result = await fetchMapMarkers(currentAlbumID, currentBounds, currentVisibleMarkerLimit, true, {
+				const markers = await fetchMapMarkers(currentAlbumID, currentBounds, currentVisibleMarkerLimit, {
 					signal: controller.signal
 				});
 				if (requestIDRef.current !== requestID) {
 					return;
 				}
-				setMapMarkers(result.markers);
-				if (setVisibleMarkerTotalCountAction) {
-					setVisibleMarkerTotalCountAction(result.totalCount);
-				}
+				setMapMarkers(markers);
 				setError(null);
 			} catch (error) {
 				if (controller.signal.aborted) {
@@ -90,14 +85,10 @@ export function useMapMarkers(
 					void logout();
 					return;
 				}
-				if (markVisibleMarkerTotalCountStaleAction) {
-					markVisibleMarkerTotalCountStaleAction();
-				}
 				setError('Failed to refresh map markers.');
-				// Keep the previous successful markers so transient failures do not blank the map.
 			}
 		},
-		[logout, setVisibleMarkerTotalCountAction, markVisibleMarkerTotalCountStaleAction]
+		[logout]
 	);
 
 	const prevAlbumID = useRef(albumID);

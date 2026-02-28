@@ -3,7 +3,7 @@
 import {useCallback, useMemo, useState} from 'react';
 
 import {useMapMarkers} from '@/features/map/hooks/useMapMarkers';
-import {useMapScene, useUIMap, useView} from '@/shared/context/AppContext';
+import {useMapScene, useView} from '@/shared/context/AppContext';
 
 import type {TViewportBounds} from '@/shared/types/api';
 import type {TAssetRow} from '@/shared/types/asset';
@@ -33,7 +33,6 @@ export type TUseMapViewModelReturn = {
 
 export function useMapViewModel(): TUseMapViewModelReturn {
 	const {visibleMarkerLimit} = useView();
-	const {setVisibleMarkerTotalCountAction, markVisibleMarkerTotalCountStaleAction} = useUIMap();
 	const {
 		gpsFilter,
 		viewMode,
@@ -59,9 +58,7 @@ export function useMapViewModel(): TUseMapViewModelReturn {
 		albumFilter,
 		mapMarkersVersion,
 		mapBounds,
-		visibleMarkerLimit,
-		setVisibleMarkerTotalCountAction,
-		markVisibleMarkerTotalCountStaleAction
+		visibleMarkerLimit
 	);
 	const assetByID = useMemo(() => {
 		const map = new Map<string, TAssetRow>();
