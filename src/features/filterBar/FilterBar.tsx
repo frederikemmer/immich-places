@@ -40,8 +40,7 @@ type TFilterBarProps = {
 	gridColumns: number;
 	onGridColumnsAction: (cols: number) => void;
 	visibleMarkerLimit: number;
-	visibleMarkerTotalCount: number | null;
-	isVisibleMarkerTotalCountStale: boolean;
+	visibleMarkerTotalCount: number;
 	onVisibleMarkerLimitAction: (limit: number) => void;
 	viewMode: TViewMode;
 	onViewModeAction: (mode: TViewMode) => void;
@@ -89,7 +88,6 @@ export function FilterBar({
 	onGridColumnsAction,
 	visibleMarkerLimit,
 	visibleMarkerTotalCount,
-	isVisibleMarkerTotalCountStale,
 	onVisibleMarkerLimitAction,
 	viewMode,
 	onViewModeAction,
@@ -126,10 +124,7 @@ export function FilterBar({
 	if (visibleMarkerLimitOptions.length > 0) {
 		markerMaxLabel = formatMarkerLimitOption(visibleMarkerLimitOptions[visibleMarkerLimitOptions.length - 1]);
 	}
-	let markerMaxText = `max ${markerMaxLabel}`;
-	if (isVisibleMarkerTotalCountStale) {
-		markerMaxText += ' stale';
-	}
+	const markerMaxText = `max ${markerMaxLabel}`;
 
 	const onDecreaseVisibleMarkerLimitAction = (): void => {
 		if (!canDecreaseVisibleMarkerLimit) {

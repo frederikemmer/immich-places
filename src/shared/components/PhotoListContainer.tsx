@@ -2,6 +2,7 @@
 
 import {useCallback, useMemo} from 'react';
 
+import {useAuth} from '@/features/auth/AuthContext';
 import {UserMenu} from '@/features/auth/UserMenu';
 import {PhotoList} from '@/shared/components/PhotoList';
 import {useBackend, useCatalog, useSelection, useUIMap, useView} from '@/shared/context/AppContext';
@@ -45,8 +46,9 @@ export function PhotoListContainer(): ReactElement {
 		assetsError,
 		loadPageAction
 	} = useCatalog();
+	const {mapMarkerCount} = useAuth();
 	const {clearSelectionAction, selectedAssets, pendingLocation, pendingLocationsByAssetID} = useSelection();
-	const {closeLightboxAction, visibleMarkerTotalCount, isVisibleMarkerTotalCountStale} = useUIMap();
+	const {closeLightboxAction} = useUIMap();
 
 	const selectedAlbum = useMemo<TAlbumRow | null>(
 		() => albums.find(album => album.immichID === selectedAlbumID) ?? null,
@@ -144,8 +146,7 @@ export function PhotoListContainer(): ReactElement {
 				pageSize,
 				gridColumns,
 				visibleMarkerLimit,
-				visibleMarkerTotalCount,
-				isVisibleMarkerTotalCountStale,
+				visibleMarkerTotalCount: mapMarkerCount,
 				viewMode,
 				selectedAlbumID,
 				selectedAlbum,

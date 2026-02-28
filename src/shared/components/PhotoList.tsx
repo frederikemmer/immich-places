@@ -38,8 +38,7 @@ type TPhotoListProps = {
 		pageSize: number;
 		gridColumns: number;
 		visibleMarkerLimit: number;
-		visibleMarkerTotalCount: number | null;
-		isVisibleMarkerTotalCountStale: boolean;
+		visibleMarkerTotalCount: number;
 		viewMode: TViewMode;
 		selectedAlbumID: string | null;
 		selectedAlbum: TAlbumRow | null;
@@ -124,7 +123,6 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 		gridColumns,
 		visibleMarkerLimit,
 		visibleMarkerTotalCount,
-		isVisibleMarkerTotalCountStale,
 		viewMode,
 		selectedAlbumID,
 		selectedAlbum,
@@ -177,7 +175,6 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 				onGridColumnsAction={onGridColumnsAction}
 				visibleMarkerLimit={visibleMarkerLimit}
 				visibleMarkerTotalCount={visibleMarkerTotalCount}
-				isVisibleMarkerTotalCountStale={isVisibleMarkerTotalCountStale}
 				onVisibleMarkerLimitAction={onVisibleMarkerLimitAction}
 				viewMode={viewMode}
 				onViewModeAction={onViewModeAction}
