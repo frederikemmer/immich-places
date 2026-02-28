@@ -90,12 +90,48 @@ func TestGetMapMarkersNoBounds(t *testing.T) {
 	seedAsset(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z")
 	seedAsset(t, db, "a3", nil, nil, "2024-01-03T12:00:00Z")
 
-	markers, err := db.getMapMarkers(ctx, testUserID, "", nil)
+	markers, err := db.getMapMarkers(ctx, testUserID, "", nil, maxMapMarkers)
 	if err != nil {
 		t.Fatalf("getMapMarkers: %v", err)
 	}
 	if len(markers) != 2 {
 		t.Errorf("expected 2 markers, got %d", len(markers))
+	}
+}
+
+func TestGetMapMarkersRespectsLimit(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	seedAsset(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z")
+	seedAsset(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z")
+
+	markers, err := db.getMapMarkers(ctx, testUserID, "", nil, 1)
+	if err != nil {
+		t.Fatalf("getMapMarkers with limit: %v", err)
+	}
+	if len(markers) != 1 {
+		t.Errorf("expected 1 marker when limit=1, got %d", len(markers))
+	}
+	if len(markers) == 1 && markers[0].ImmichID != "a2" {
+		t.Errorf("expected latest marker a2, got %s", markers[0].ImmichID)
+	}
+}
+
+func TestCountMapMarkers(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	seedAsset(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z")
+	seedAsset(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z")
+	seedAsset(t, db, "a3", nil, nil, "2024-01-03T12:00:00Z")
+
+	count, err := db.countMapMarkers(ctx, testUserID, "", nil)
+	if err != nil {
+		t.Fatalf("countMapMarkers: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected map marker count 2, got %d", count)
 	}
 }
 
@@ -107,7 +143,7 @@ func TestGetMapMarkersWithBounds(t *testing.T) {
 	seedAsset(t, db, "nyc", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z")
 
 	bounds := &TViewportBounds{North: 50, South: 45, East: 10, West: -5}
-	markers, err := db.getMapMarkers(ctx, testUserID, "", bounds)
+	markers, err := db.getMapMarkers(ctx, testUserID, "", bounds, maxMapMarkers)
 	if err != nil {
 		t.Fatalf("getMapMarkers with bounds: %v", err)
 	}
@@ -128,7 +164,7 @@ func TestGetMapMarkersDatelineCrossing(t *testing.T) {
 	seedAsset(t, db, "paris", ptr(48.85), ptr(2.35), "2024-01-03T12:00:00Z")
 
 	bounds := &TViewportBounds{North: -10, South: -20, East: -170, West: 170}
-	markers, err := db.getMapMarkers(ctx, testUserID, "", bounds)
+	markers, err := db.getMapMarkers(ctx, testUserID, "", bounds, maxMapMarkers)
 	if err != nil {
 		t.Fatalf("getMapMarkers dateline: %v", err)
 	}
@@ -585,7 +621,7 @@ func TestGetMapMarkersWithAlbum(t *testing.T) {
 	db.upsertAlbum(ctx, testUserID, "album1", "Test", nil, 1, "2024-01-01T00:00:00Z", nil)
 	db.replaceAlbumAssets(ctx, testUserID, "album1", []string{"a1"})
 
-	markers, err := db.getMapMarkers(ctx, testUserID, "album1", nil)
+	markers, err := db.getMapMarkers(ctx, testUserID, "album1", nil, maxMapMarkers)
 	if err != nil {
 		t.Fatalf("getMapMarkers with album: %v", err)
 	}
@@ -604,7 +640,7 @@ func TestGetMapMarkersWithAlbumAndBounds(t *testing.T) {
 	db.replaceAlbumAssets(ctx, testUserID, "album1", []string{"a1", "a2"})
 
 	bounds := &TViewportBounds{North: 50, South: 45, East: 10, West: -5}
-	markers, err := db.getMapMarkers(ctx, testUserID, "album1", bounds)
+	markers, err := db.getMapMarkers(ctx, testUserID, "album1", bounds, maxMapMarkers)
 	if err != nil {
 		t.Fatalf("getMapMarkers album+bounds: %v", err)
 	}
@@ -627,5 +663,63 @@ func TestDeleteAlbumsNotInEmpty(t *testing.T) {
 	m, _ := db.getAlbumUpdatedAtMap(ctx, testUserID)
 	if len(m) != 0 {
 		t.Errorf("expected 0 albums, got %d", len(m))
+	}
+}
+
+func TestDeleteUserSyncData(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	seedAsset(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z")
+	seedAsset(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z")
+	db.upsertAlbum(ctx, testUserID, "album1", "Test", nil, 2, "2024-01-01T00:00:00Z", nil)
+	db.replaceAlbumAssets(ctx, testUserID, "album1", []string{"a1", "a2"})
+	db.replaceFrequentLocations(ctx, testUserID, []FrequentLocationRow{
+		{Latitude: 48.85, Longitude: 2.35, Label: "Paris", AssetCount: 10},
+	})
+	db.upsertLibrary(ctx, "lib1", "My Library", 5)
+	db.updateLibraryVisibility(ctx, "lib1", true)
+	db.setSyncState(ctx, testUserID, "lastSyncAt", "2024-01-01T00:00:00Z")
+
+	otherUserID := "other-user-id"
+	db.createUser(ctx, otherUserID, "other@example.com", "hashed")
+	db.upsertAssets(ctx, otherUserID, []AssetRow{{
+		ImmichID: "other-a1", Type: "IMAGE", OriginalFileName: "o.jpg", FileCreatedAt: "2024-01-01T12:00:00Z",
+		Latitude: ptr(35.0), Longitude: ptr(139.0),
+	}})
+	db.setSyncState(ctx, otherUserID, "lastSyncAt", "2024-06-01T00:00:00Z")
+
+	if err := db.deleteUserSyncData(ctx, testUserID); err != nil {
+		t.Fatalf("deleteUserSyncData: %v", err)
+	}
+
+	assets, _ := db.countAssets(ctx, testUserID)
+	if assets != 0 {
+		t.Errorf("expected 0 assets for target user, got %d", assets)
+	}
+	albums, _ := db.getAlbumUpdatedAtMap(ctx, testUserID)
+	if len(albums) != 0 {
+		t.Errorf("expected 0 albums for target user, got %d", len(albums))
+	}
+	locs, _ := db.getFrequentLocations(ctx, testUserID, 10)
+	if len(locs) != 0 {
+		t.Errorf("expected 0 frequent locations for target user, got %d", len(locs))
+	}
+	libs, _ := db.getLibraries(ctx)
+	if len(libs) != 1 {
+		t.Errorf("expected 1 global library preserved, got %d", len(libs))
+	}
+	syncVal, _ := db.getSyncState(ctx, testUserID, "lastSyncAt")
+	if syncVal != nil {
+		t.Errorf("expected nil syncState for target user, got %v", *syncVal)
+	}
+
+	otherAssets, _ := db.countAssets(ctx, otherUserID)
+	if otherAssets != 1 {
+		t.Errorf("expected 1 asset for other user, got %d", otherAssets)
+	}
+	otherSync, _ := db.getSyncState(ctx, otherUserID, "lastSyncAt")
+	if otherSync == nil || *otherSync != "2024-06-01T00:00:00Z" {
+		t.Errorf("expected other user syncState preserved, got %v", otherSync)
 	}
 }

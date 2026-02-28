@@ -2,6 +2,7 @@
 
 import {useCallback, useEffect, useRef} from 'react';
 
+import {useAuth} from '@/features/auth/AuthContext';
 import {useSelectionCallbacks} from '@/features/selection/useSelectionCallbacks';
 import {useSelectionController} from '@/features/selection/useSelectionController';
 import {useCatalogSuggestions} from '@/features/suggestions/useCatalogSuggestions';
@@ -42,13 +43,15 @@ type TUseCatalogRefreshDataArgs = {
 	loadPageAction: (page: number) => Promise<void>;
 	getCurrentPage: () => number;
 	bumpMapMarkers: () => void;
+	refreshUser: () => Promise<void>;
 };
 
 function useCatalogRefreshData({
 	loadAlbumsAction,
 	loadPageAction,
 	getCurrentPage,
-	bumpMapMarkers
+	bumpMapMarkers,
+	refreshUser
 }: TUseCatalogRefreshDataArgs): () => Promise<void> {
 	const currentPageRef = useRef(getCurrentPage());
 	useEffect(() => {
@@ -57,12 +60,13 @@ function useCatalogRefreshData({
 
 	return useCallback(async () => {
 		const currentPage = currentPageRef.current;
-		await Promise.all([loadAlbumsAction(), loadPageAction(currentPage)]);
+		await Promise.all([loadAlbumsAction(), loadPageAction(currentPage), refreshUser()]);
 		bumpMapMarkers();
-	}, [loadAlbumsAction, loadPageAction, bumpMapMarkers]);
+	}, [loadAlbumsAction, loadPageAction, refreshUser, bumpMapMarkers]);
 }
 
 export function useAppProviderState(): TAppProviderState {
+	const {refreshUser} = useAuth();
 	const {isReady, health, error: backendError, retry: retryBackendAction, refreshHealth} = useBackendStatus();
 
 	const {
@@ -72,6 +76,8 @@ export function useAppProviderState(): TAppProviderState {
 		setPageSizeAction,
 		gridColumns,
 		setGridColumnsAction,
+		visibleMarkerLimit,
+		setVisibleMarkerLimitAction,
 		viewMode,
 		setViewModeAction,
 		selectedAlbumID,
@@ -90,6 +96,7 @@ export function useAppProviderState(): TAppProviderState {
 	const {onAssetSavedAction, onBatchSavedAction} = useSelectionCallbacks({
 		removeAsset: catalogDomain.removeAsset,
 		refreshHealth,
+		refreshUser,
 		loadAlbumsAction: catalogDomain.loadAlbumsAction
 	});
 
@@ -138,20 +145,28 @@ export function useAppProviderState(): TAppProviderState {
 		albums: catalogDomain.albums
 	});
 
-	const {loadAlbumsAction, loadPageAction} = catalogDomain;
+	const {loadAlbumsAction, loadPageAction, clearCatalog: clearCatalogDomainAction} = catalogDomain;
 	const getCurrentPage = useCallback(() => catalogDomain.currentPage, [catalogDomain.currentPage]);
 	const refreshData = useCatalogRefreshData({
 		loadAlbumsAction,
 		loadPageAction,
 		getCurrentPage,
-		bumpMapMarkers
+		bumpMapMarkers,
+		refreshUser
 	});
 
 	const {isSyncing, syncError, resyncAction} = useResync({
 		isReady,
+		syncVersion: health?.syncVersion ?? 0,
 		retryBackendAction,
-		refreshData
+		refreshData,
+		refreshAuthAction: refreshUser
 	});
+
+	const clearCatalogAction = useCallback(() => {
+		clearCatalogDomainAction();
+		clearSelectionAction();
+	}, [clearCatalogDomainAction, clearSelectionAction]);
 
 	const backendValue = useBackendValue({
 		isReady,
@@ -160,7 +175,9 @@ export function useAppProviderState(): TAppProviderState {
 		retryBackendAction,
 		isSyncing,
 		syncError,
-		resyncAction
+		resyncAction,
+		refreshDataAction: refreshData,
+		clearCatalogAction
 	});
 
 	const viewValue = useViewValue({
@@ -170,6 +187,8 @@ export function useAppProviderState(): TAppProviderState {
 		setPageSizeAction,
 		gridColumns,
 		setGridColumnsAction,
+		visibleMarkerLimit,
+		setVisibleMarkerLimitAction,
 		viewMode,
 		setViewModeAction,
 		selectedAlbumID,

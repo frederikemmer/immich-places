@@ -18,6 +18,15 @@ type ImmichClientFactory struct {
 	httpClient *http.Client
 }
 
+type ImmichHTTPError struct {
+	Operation  string
+	StatusCode int
+}
+
+func (e *ImmichHTTPError) Error() string {
+	return fmt.Sprintf("immich %s returned HTTP %d", e.Operation, e.StatusCode)
+}
+
 func newImmichClientFactory(baseURL string) *ImmichClientFactory {
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 3
@@ -185,6 +194,25 @@ func (c *ImmichClient) getAlbums(ctx context.Context) ([]ImmichAlbumResponse, er
 		return nil, fmt.Errorf("failed to decode albums response: %w", err)
 	}
 	return albums, nil
+}
+
+func (c *ImmichClient) getLibraries(ctx context.Context) ([]ImmichLibraryResponse, error) {
+	resp, err := c.doRequest(ctx, "GET", "/api/libraries", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		io.Copy(io.Discard, resp.Body)
+		return nil, &ImmichHTTPError{Operation: "getLibraries", StatusCode: resp.StatusCode}
+	}
+
+	var libraries []ImmichLibraryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&libraries); err != nil {
+		return nil, fmt.Errorf("failed to decode libraries response: %w", err)
+	}
+	return libraries, nil
 }
 
 func (c *ImmichClient) getAlbumAssetIDs(ctx context.Context, albumID string) ([]string, error) {

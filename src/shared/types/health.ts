@@ -4,4 +4,5 @@ export type THealthResponse = {
 	noGPSAssets: number;
 	lastSyncAt: string | null;
 	immichURL: string;
+	syncVersion: number;
 };
