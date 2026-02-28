@@ -50,6 +50,16 @@ func (s *SyncService) isUserSyncing(userID string) bool {
 	return s.userSyncing[userID]
 }
 
+func (s *SyncService) acquireUserSyncLock(userID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.userSyncing[userID] {
+		return false
+	}
+	s.userSyncing[userID] = true
+	return true
+}
+
 func (s *SyncService) releaseUserSyncLock(userID string) {
 	s.mu.Lock()
 	s.userSyncing[userID] = false
@@ -80,7 +90,11 @@ func (s *SyncService) cancelUserSync(userID string) bool {
 func (s *SyncService) cancelUserSyncWithTimeout(userID string, waitTimeout time.Duration) bool {
 	s.mu.Lock()
 	cancel := s.userCancels[userID]
+	syncing := s.userSyncing[userID]
 	s.mu.Unlock()
+	if syncing && cancel == nil {
+		return false
+	}
 	if cancel != nil {
 		cancel()
 	}
@@ -88,14 +102,32 @@ func (s *SyncService) cancelUserSyncWithTimeout(userID string, waitTimeout time.
 	for {
 		s.mu.Lock()
 		syncing := s.userSyncing[userID]
+		cancel := s.userCancels[userID]
 		s.mu.Unlock()
 		if !syncing {
 			return true
+		}
+		if cancel == nil {
+			return false
 		}
 		if time.Now().After(deadline) {
 			return false
 		}
 		time.Sleep(cancelSyncPollIntervalMS)
+	}
+}
+
+func (s *SyncService) pauseUserSync(ctx context.Context, userID string) error {
+	for {
+		s.cancelUserSyncWithTimeout(userID, cancelSyncPollIntervalMS)
+		if s.acquireUserSyncLock(userID) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("pause user sync: %w", ctx.Err())
+		case <-time.After(cancelSyncPollIntervalMS):
+		}
 	}
 }
 
