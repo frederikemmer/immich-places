@@ -50,7 +50,10 @@ export function useMapMarkers(
 	const {logout} = useAuth();
 	const requestIDRef = useRef(0);
 	const abortRef = useRef<AbortController | null>(null);
-	const effectiveBounds = bounds ?? null;
+	let effectiveBounds = bounds ?? null;
+	if (albumID) {
+		effectiveBounds = null;
+	}
 	const currentBoundsKey = boundsKey(effectiveBounds);
 
 	const load = useCallback(
