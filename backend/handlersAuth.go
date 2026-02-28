@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -256,10 +257,31 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 		keyToStore = req.ImmichAPIKey
 	}
 
-	if req.ImmichAPIKey != nil && h.syncService != nil {
-		if !h.syncService.cancelUserSync(user.ID) {
-			log.Printf("UpdateSettings: timed out waiting for sync cancellation for user %s", user.ID)
+	shouldReleaseSyncLock := false
+	releaseSyncLock := func() {
+		if !shouldReleaseSyncLock || h.syncService == nil {
+			return
 		}
+		h.syncService.releaseUserSyncLock(user.ID)
+		shouldReleaseSyncLock = false
+	}
+	defer releaseSyncLock()
+
+	if keyToStore != nil && h.syncService != nil {
+		lockCtx, lockCancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer lockCancel()
+		if err := h.syncService.pauseUserSync(lockCtx, user.ID); err != nil {
+			log.Printf("UpdateSettings: failed to pause sync: %v", err)
+			writeError(w, http.StatusServiceUnavailable, "failed to pause active sync")
+			return
+		}
+		shouldReleaseSyncLock = true
+	}
+
+	if err := h.db.updateImmichAPIKey(r.Context(), user.ID, keyToStore); err != nil {
+		log.Printf("UpdateSettings: failed to update API key: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
 	}
 
 	if keyToStore != nil {
@@ -268,12 +290,6 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusInternalServerError, "failed to clear previous sync data")
 			return
 		}
-	}
-
-	if err := h.db.updateImmichAPIKey(r.Context(), user.ID, keyToStore); err != nil {
-		log.Printf("UpdateSettings: failed to update API key: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
 	}
 
 	updated, err := h.db.getUserByID(r.Context(), user.ID)
@@ -286,9 +302,12 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 	if keyToStore != nil {
 		if h.syncService != nil {
 			immich := h.immichFactory.forUser(*keyToStore)
-			if err := h.syncService.syncLibraries(r.Context(), user.ID, immich); err != nil {
+			syncCtx, syncCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer syncCancel()
+			if err := h.syncService.syncLibraries(syncCtx, user.ID, immich); err != nil {
 				log.Printf("UpdateSettings: initial library sync failed: %v", err)
 			}
+			releaseSyncLock()
 			h.syncService.triggerUserSync(user.ID, *keyToStore)
 		}
 	} else if req.ImmichAPIKey != nil {
