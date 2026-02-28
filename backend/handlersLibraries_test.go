@@ -59,8 +59,8 @@ func TestHandleGetLibrariesWithData(t *testing.T) {
 
 	ctx := context.Background()
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
-	db.upsertLibrary(ctx, "lib1", "Photos", 100)
-	db.upsertLibrary(ctx, "lib2", "Archive", 50)
+	db.upsertLibrary(ctx, testUserID, "lib1", "Photos", 100)
+	db.upsertLibrary(ctx, testUserID, "lib2", "Archive", 50)
 
 	req := withTestUser(httptest.NewRequest("GET", "/libraries", nil))
 	rec := httptest.NewRecorder()
@@ -83,7 +83,7 @@ func TestHandleUpdateLibrarySuccess(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	db.upsertLibrary(ctx, "lib1", "Photos", 100)
+	db.upsertLibrary(ctx, testUserID, "lib1", "Photos", 100)
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
 
 	req := withTestUser(httptest.NewRequest("PUT", "/libraries/lib1", strings.NewReader(`{"isHidden":true}`)))
@@ -231,8 +231,12 @@ func TestHandleGetLibrariesForbiddenWithoutAccess(t *testing.T) {
 	}
 }
 
-func TestHandleRefreshLibrariesForbiddenWithoutAccess(t *testing.T) {
+func TestHandleRefreshLibrariesDoesNotRequireStoredAccessFlag(t *testing.T) {
 	_, _, mux := newTestLibraryHandlers(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/libraries" {
+			json.NewEncoder(w).Encode([]ImmichLibraryResponse{})
+			return
+		}
 		http.NotFound(w, r)
 	})
 
@@ -240,8 +244,8 @@ func TestHandleRefreshLibrariesForbiddenWithoutAccess(t *testing.T) {
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403 for non-admin, got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 without stored access flag, got %d", rec.Code)
 	}
 }
 

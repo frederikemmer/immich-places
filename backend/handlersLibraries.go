@@ -84,7 +84,7 @@ func (h *LibraryHandlers) handleUpdateLibrary(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err := h.db.updateLibraryVisibility(r.Context(), libraryID, *req.IsHidden)
+	err := h.db.updateLibraryVisibility(r.Context(), user.ID, libraryID, *req.IsHidden)
 	if err != nil {
 		if err.Error() == "library not found" {
 			writeError(w, http.StatusNotFound, "library not found")
@@ -102,10 +102,6 @@ func (h *LibraryHandlers) handleRefreshLibraries(w http.ResponseWriter, r *http.
 	user := getUserFromContext(r)
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
-		return
-	}
-	if !h.hasLibraryAccess(r.Context(), user.ID) {
-		writeError(w, http.StatusForbidden, "library management requires admin access")
 		return
 	}
 	if user.ImmichAPIKey == nil {
