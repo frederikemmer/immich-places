@@ -24,6 +24,7 @@ const (
 	frequentLocationsLimit  = 5
 	maxClusterResults       = 5
 	defaultMapMarkersLimit  = maxMapMarkers
+	syncVersion             = 1
 )
 
 var (
@@ -97,8 +98,9 @@ func (h *Handlers) ensureAssetVisible(ctx context.Context, userID, assetID strin
 
 func (h *Handlers) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
-		Status:    "ok",
-		ImmichURL: h.immichExternalURL,
+		Status:      "ok",
+		ImmichURL:   h.immichExternalURL,
+		SyncVersion: syncVersion,
 	})
 }
 

@@ -60,6 +60,7 @@ type HealthResponse struct {
 	NoGPSAssets  int     `json:"noGPSAssets"`
 	LastSyncAt   *string `json:"lastSyncAt"`
 	ImmichURL    string  `json:"immichURL"`
+	SyncVersion  int     `json:"syncVersion"`
 }
 
 type SyncStatusResponse struct {
