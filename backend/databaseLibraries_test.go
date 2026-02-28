@@ -9,11 +9,11 @@ func TestUpsertAndGetLibraries(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	err := db.upsertLibrary(ctx, testUserID, "lib1", "Photos", 100)
+	err := db.upsertLibrary(ctx, "lib1", "Photos", 100)
 	if err != nil {
 		t.Fatalf("upsertLibrary: %v", err)
 	}
-	err = db.upsertLibrary(ctx, testUserID, "lib2", "Videos", 50)
+	err = db.upsertLibrary(ctx, "lib2", "Videos", 50)
 	if err != nil {
 		t.Fatalf("upsertLibrary: %v", err)
 	}
@@ -21,7 +21,7 @@ func TestUpsertAndGetLibraries(t *testing.T) {
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", ptr("lib1"))
 	seedAssetWithLibrary(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z", ptr("lib1"))
 
-	libs, err := db.getLibraries(ctx, testUserID)
+	libs, err := db.getLibraries(ctx)
 	if err != nil {
 		t.Fatalf("getLibraries: %v", err)
 	}
@@ -46,10 +46,10 @@ func TestUpsertLibraryUpdatesExisting(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "Old Name", 10)
-	db.upsertLibrary(ctx, testUserID, "lib1", "New Name", 200)
+	db.upsertLibrary(ctx, "lib1", "Old Name", 10)
+	db.upsertLibrary(ctx, "lib1", "New Name", 200)
 
-	libs, _ := db.getLibraries(ctx, testUserID)
+	libs, _ := db.getLibraries(ctx)
 	if len(libs) != 1 {
 		t.Fatalf("expected 1 library after upsert, got %d", len(libs))
 	}
@@ -62,24 +62,24 @@ func TestUpdateLibraryVisibility(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "Photos", 100)
+	db.upsertLibrary(ctx, "lib1", "Photos", 100)
 
-	err := db.updateLibraryVisibility(ctx, testUserID, "lib1", true)
+	err := db.updateLibraryVisibility(ctx, "lib1", true)
 	if err != nil {
 		t.Fatalf("updateLibraryVisibility: %v", err)
 	}
 
-	libs, _ := db.getLibraries(ctx, testUserID)
+	libs, _ := db.getLibraries(ctx)
 	if !libs[0].IsHidden {
 		t.Error("expected library to be hidden")
 	}
 
-	err = db.updateLibraryVisibility(ctx, testUserID, "lib1", false)
+	err = db.updateLibraryVisibility(ctx, "lib1", false)
 	if err != nil {
 		t.Fatalf("updateLibraryVisibility unhide: %v", err)
 	}
 
-	libs, _ = db.getLibraries(ctx, testUserID)
+	libs, _ = db.getLibraries(ctx)
 	if libs[0].IsHidden {
 		t.Error("expected library to not be hidden")
 	}
@@ -89,7 +89,7 @@ func TestUpdateLibraryVisibilityNotFound(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	err := db.updateLibraryVisibility(ctx, testUserID, "nonexistent", true)
+	err := db.updateLibraryVisibility(ctx, "nonexistent", true)
 	if err == nil {
 		t.Error("expected error for nonexistent library")
 	}
@@ -99,16 +99,16 @@ func TestDeleteLibrariesNotIn(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "Keep", 10)
-	db.upsertLibrary(ctx, testUserID, "lib2", "Remove", 20)
-	db.upsertLibrary(ctx, testUserID, "lib3", "Also Remove", 30)
+	db.upsertLibrary(ctx, "lib1", "Keep", 10)
+	db.upsertLibrary(ctx, "lib2", "Remove", 20)
+	db.upsertLibrary(ctx, "lib3", "Also Remove", 30)
 
-	err := db.deleteLibrariesNotIn(ctx, testUserID, []string{"lib1"})
+	err := db.deleteLibrariesNotIn(ctx, []string{"lib1"})
 	if err != nil {
 		t.Fatalf("deleteLibrariesNotIn: %v", err)
 	}
 
-	libs, _ := db.getLibraries(ctx, testUserID)
+	libs, _ := db.getLibraries(ctx)
 	if len(libs) != 1 {
 		t.Fatalf("expected 1 library, got %d", len(libs))
 	}
@@ -135,24 +135,21 @@ func TestDeleteLibrariesNotInKeepsLibrariesLinkedToAssets(t *testing.T) {
 		t.Fatalf("seed other user asset: %v", err)
 	}
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "Keep", 10)
-	db.upsertLibrary(ctx, testUserID, "lib2", "Shared", 20)
+	db.upsertLibrary(ctx, "lib1", "Keep", 10)
+	db.upsertLibrary(ctx, "lib2", "Shared", 20)
 
-	err := db.deleteLibrariesNotIn(ctx, testUserID, []string{"lib1"})
+	err := db.deleteLibrariesNotIn(ctx, []string{"lib1"})
 	if err != nil {
 		t.Fatalf("deleteLibrariesNotIn: %v", err)
 	}
 
-	libs, _ := db.getLibraries(ctx, testUserID)
-	if len(libs) != 1 {
-		t.Fatalf("expected only lib1 for test user, got %d", len(libs))
-	}
-	if libs[0].LibraryID != "lib1" {
-		t.Fatalf("expected lib1 to remain for test user, got %s", libs[0].LibraryID)
+	libs, _ := db.getLibraries(ctx)
+	if len(libs) != 2 {
+		t.Fatalf("expected 2 libraries (lib1 kept + lib2 linked to assets), got %d", len(libs))
 	}
 }
 
-func TestLibraryVisibilityIsScopedPerUser(t *testing.T) {
+func TestLibraryVisibilityIsGlobal(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
@@ -180,14 +177,11 @@ func TestLibraryVisibilityIsScopedPerUser(t *testing.T) {
 		t.Fatalf("seed other user asset: %v", err)
 	}
 
-	if err := db.upsertLibrary(ctx, testUserID, "lib1", "Shared", 1); err != nil {
-		t.Fatalf("upsert test user library: %v", err)
+	if err := db.upsertLibrary(ctx, "lib1", "Shared", 1); err != nil {
+		t.Fatalf("upsert library: %v", err)
 	}
-	if err := db.upsertLibrary(ctx, otherUserID, "lib1", "Shared", 1); err != nil {
-		t.Fatalf("upsert other user library: %v", err)
-	}
-	if err := db.updateLibraryVisibility(ctx, testUserID, "lib1", true); err != nil {
-		t.Fatalf("hide test user library: %v", err)
+	if err := db.updateLibraryVisibility(ctx, "lib1", true); err != nil {
+		t.Fatalf("hide library: %v", err)
 	}
 
 	testUserCount, _ := db.countAssets(ctx, testUserID)
@@ -196,8 +190,8 @@ func TestLibraryVisibilityIsScopedPerUser(t *testing.T) {
 	}
 
 	otherUserCount, _ := db.countAssets(ctx, otherUserID)
-	if otherUserCount != 1 {
-		t.Fatalf("expected other user assets to remain visible, got %d", otherUserCount)
+	if otherUserCount != 0 {
+		t.Fatalf("expected hidden assets for other user too (global), got %d", otherUserCount)
 	}
 }
 
@@ -205,14 +199,14 @@ func TestDeleteLibrariesNotInEmpty(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "Delete All", 10)
+	db.upsertLibrary(ctx, "lib1", "Delete All", 10)
 
-	err := db.deleteLibrariesNotIn(ctx, testUserID, []string{})
+	err := db.deleteLibrariesNotIn(ctx, []string{})
 	if err != nil {
 		t.Fatalf("deleteLibrariesNotIn empty: %v", err)
 	}
 
-	libs, _ := db.getLibraries(ctx, testUserID)
+	libs, _ := db.getLibraries(ctx)
 	if len(libs) != 0 {
 		t.Errorf("expected 0 libraries, got %d", len(libs))
 	}
@@ -222,11 +216,11 @@ func TestGetHiddenLibraryIDs(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "Visible", 10)
-	db.upsertLibrary(ctx, testUserID, "lib2", "Hidden", 20)
-	db.updateLibraryVisibility(ctx, testUserID, "lib2", true)
+	db.upsertLibrary(ctx, "lib1", "Visible", 10)
+	db.upsertLibrary(ctx, "lib2", "Hidden", 20)
+	db.updateLibraryVisibility(ctx, "lib2", true)
 
-	ids, err := db.getHiddenLibraryIDs(ctx, testUserID)
+	ids, err := db.getHiddenLibraryIDs(ctx)
 	if err != nil {
 		t.Fatalf("getHiddenLibraryIDs: %v", err)
 	}
@@ -258,7 +252,7 @@ func TestHiddenLibraryAssetsExcludedFromCount(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 2)
+	db.upsertLibrary(ctx, "lib1", "External", 2)
 
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", nil)
 	seedAssetWithLibrary(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z", ptr("lib1"))
@@ -269,7 +263,7 @@ func TestHiddenLibraryAssetsExcludedFromCount(t *testing.T) {
 		t.Errorf("before hiding: expected 3 total, got %d", total)
 	}
 
-	db.updateLibraryVisibility(ctx, testUserID, "lib1", true)
+	db.updateLibraryVisibility(ctx, "lib1", true)
 
 	total, _ = db.countAssets(ctx, testUserID)
 	if total != 1 {
@@ -289,8 +283,8 @@ func TestHiddenLibraryAssetsExcludedFromMapMarkers(t *testing.T) {
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", nil)
 	seedAssetWithLibrary(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z", ptr("lib1"))
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 1)
-	db.updateLibraryVisibility(ctx, testUserID, "lib1", true)
+	db.upsertLibrary(ctx, "lib1", "External", 1)
+	db.updateLibraryVisibility(ctx, "lib1", true)
 
 	markers, err := db.getMapMarkers(ctx, testUserID, "", nil)
 	if err != nil {
@@ -308,8 +302,8 @@ func TestHiddenLibraryAssetsExcludedFromFilteredAssets(t *testing.T) {
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", nil)
 	seedAssetWithLibrary(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z", ptr("lib1"))
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 1)
-	db.updateLibraryVisibility(ctx, testUserID, "lib1", true)
+	db.upsertLibrary(ctx, "lib1", "External", 1)
+	db.updateLibraryVisibility(ctx, "lib1", true)
 
 	assets, err := db.getFilteredAssets(ctx, testUserID, "", true, 1, 10)
 	if err != nil {
@@ -330,15 +324,15 @@ func TestUnhidingLibraryRestoresAssets(t *testing.T) {
 	ctx := context.Background()
 
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", ptr("lib1"))
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 1)
-	db.updateLibraryVisibility(ctx, testUserID, "lib1", true)
+	db.upsertLibrary(ctx, "lib1", "External", 1)
+	db.updateLibraryVisibility(ctx, "lib1", true)
 
 	total, _ := db.countAssets(ctx, testUserID)
 	if total != 0 {
 		t.Errorf("expected 0 after hiding, got %d", total)
 	}
 
-	db.updateLibraryVisibility(ctx, testUserID, "lib1", false)
+	db.updateLibraryVisibility(ctx, "lib1", false)
 	total, _ = db.countAssets(ctx, testUserID)
 	if total != 1 {
 		t.Errorf("expected 1 after unhiding, got %d", total)
@@ -363,7 +357,7 @@ func TestUnknownLibraryAssetsVisible(t *testing.T) {
 		t.Errorf("expected 3 markers, got %d", len(markers))
 	}
 
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 2)
+	db.upsertLibrary(ctx, "lib1", "External", 2)
 	total, _ = db.countAssets(ctx, testUserID)
 	if total != 3 {
 		t.Errorf("after registering library: expected 3 assets, got %d", total)
@@ -388,7 +382,7 @@ func TestNeedsLibraryIDBackfillNoAssets(t *testing.T) {
 	ctx := context.Background()
 
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 10)
+	db.upsertLibrary(ctx, "lib1", "External", 10)
 
 	needs, err := db.needsLibraryIDBackfill(ctx, testUserID)
 	if err != nil {
@@ -404,7 +398,7 @@ func TestNeedsLibraryIDBackfillWithTaggedAssets(t *testing.T) {
 	ctx := context.Background()
 
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 10)
+	db.upsertLibrary(ctx, "lib1", "External", 10)
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", ptr("lib1"))
 
 	needs, err := db.needsLibraryIDBackfill(ctx, testUserID)
@@ -421,7 +415,7 @@ func TestNeedsLibraryIDBackfillWithMixedTaggedAndUntaggedAssets(t *testing.T) {
 	ctx := context.Background()
 
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 10)
+	db.upsertLibrary(ctx, "lib1", "External", 10)
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", ptr("lib1"))
 	seedAssetWithLibrary(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z", nil)
 
@@ -439,7 +433,7 @@ func TestNeedsLibraryIDBackfillWithUntaggedAssets(t *testing.T) {
 	ctx := context.Background()
 
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 10)
+	db.upsertLibrary(ctx, "lib1", "External", 10)
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", nil)
 
 	needs, err := db.needsLibraryIDBackfill(ctx, testUserID)
@@ -456,7 +450,7 @@ func TestNeedsLibraryIDBackfillSkippedWhenMarkedDone(t *testing.T) {
 	ctx := context.Background()
 
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 10)
+	db.upsertLibrary(ctx, "lib1", "External", 10)
 	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", nil)
 	if err := db.setSyncState(ctx, testUserID, "libraryIDBackfillDone", "true"); err != nil {
 		t.Fatalf("setSyncState libraryIDBackfillDone: %v", err)
@@ -468,5 +462,39 @@ func TestNeedsLibraryIDBackfillSkippedWhenMarkedDone(t *testing.T) {
 	}
 	if needs {
 		t.Error("expected false when libraryID backfill is already marked done")
+	}
+}
+
+func TestGetLibrariesCountsAcrossAllUsers(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	otherUserID := "other-user-id"
+	if err := db.createUser(ctx, otherUserID, "other@example.com", "hashed"); err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+
+	db.upsertLibrary(ctx, "lib1", "Shared Library", 100)
+
+	seedAssetWithLibrary(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z", ptr("lib1"))
+	if err := db.upsertAssets(ctx, otherUserID, []AssetRow{{
+		ImmichID:         "b1",
+		Type:             "IMAGE",
+		OriginalFileName: "b1.jpg",
+		FileCreatedAt:    "2024-01-02T12:00:00Z",
+		LibraryID:        ptr("lib1"),
+	}}); err != nil {
+		t.Fatalf("seed other user asset: %v", err)
+	}
+
+	libs, err := db.getLibraries(ctx)
+	if err != nil {
+		t.Fatalf("getLibraries: %v", err)
+	}
+	if len(libs) != 1 {
+		t.Fatalf("expected 1 library, got %d", len(libs))
+	}
+	if libs[0].AssetCount != 2 {
+		t.Errorf("expected 2 assets counted across both users, got %d", libs[0].AssetCount)
 	}
 }

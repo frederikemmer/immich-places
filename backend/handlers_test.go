@@ -551,10 +551,10 @@ func TestHandleGetThumbnailHiddenLibraryAssetReturnsNotFound(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("upsertAssets: %v", err)
 	}
-	if err := handlers.db.(*Database).upsertLibrary(ctx, testUserID, "lib1", "External", 1); err != nil {
+	if err := handlers.db.(*Database).upsertLibrary(ctx, "lib1", "External", 1); err != nil {
 		t.Fatalf("upsertLibrary: %v", err)
 	}
-	if err := handlers.db.(*Database).updateLibraryVisibility(ctx, testUserID, "lib1", true); err != nil {
+	if err := handlers.db.(*Database).updateLibraryVisibility(ctx, "lib1", true); err != nil {
 		t.Fatalf("updateLibraryVisibility: %v", err)
 	}
 
@@ -588,10 +588,10 @@ func TestHandleUpdateLocationHiddenLibraryAssetReturnsNotFound(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("upsertAssets: %v", err)
 	}
-	if err := handlers.db.(*Database).upsertLibrary(ctx, testUserID, "lib1", "External", 1); err != nil {
+	if err := handlers.db.(*Database).upsertLibrary(ctx, "lib1", "External", 1); err != nil {
 		t.Fatalf("upsertLibrary: %v", err)
 	}
-	if err := handlers.db.(*Database).updateLibraryVisibility(ctx, testUserID, "lib1", true); err != nil {
+	if err := handlers.db.(*Database).updateLibraryVisibility(ctx, "lib1", true); err != nil {
 		t.Fatalf("updateLibraryVisibility: %v", err)
 	}
 

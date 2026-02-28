@@ -59,8 +59,8 @@ func TestHandleGetLibrariesWithData(t *testing.T) {
 
 	ctx := context.Background()
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
-	db.upsertLibrary(ctx, testUserID, "lib1", "Photos", 100)
-	db.upsertLibrary(ctx, testUserID, "lib2", "Archive", 50)
+	db.upsertLibrary(ctx,"lib1", "Photos", 100)
+	db.upsertLibrary(ctx,"lib2", "Archive", 50)
 
 	req := withTestUser(httptest.NewRequest("GET", "/libraries", nil))
 	rec := httptest.NewRecorder()
@@ -83,7 +83,7 @@ func TestHandleUpdateLibrarySuccess(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	db.upsertLibrary(ctx, testUserID, "lib1", "Photos", 100)
+	db.upsertLibrary(ctx,"lib1", "Photos", 100)
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
 
 	req := withTestUser(httptest.NewRequest("PUT", "/libraries/lib1", strings.NewReader(`{"isHidden":true}`)))
@@ -95,7 +95,7 @@ func TestHandleUpdateLibrarySuccess(t *testing.T) {
 		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
 	}
 
-	libs, _ := db.getLibraries(ctx, testUserID)
+	libs, _ := db.getLibraries(ctx)
 	if !libs[0].IsHidden {
 		t.Error("expected library to be hidden after update")
 	}
@@ -180,7 +180,7 @@ func TestHandleRefreshLibraries(t *testing.T) {
 		t.Errorf("expected 1 library after refresh, got %d", len(libs))
 	}
 
-	dbLibs, _ := db.getLibraries(ctx, testUserID)
+	dbLibs, _ := db.getLibraries(ctx)
 	if len(dbLibs) != 1 {
 		t.Errorf("expected 1 library in DB after refresh, got %d", len(dbLibs))
 	}

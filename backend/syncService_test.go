@@ -459,7 +459,7 @@ func TestDoIncrementalSyncForcesFullWhenBackfillNeeded(t *testing.T) {
 
 	db.setSyncState(ctx, testUserID, "lastSyncAt", "2024-01-01T00:00:00Z")
 	db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true")
-	db.upsertLibrary(ctx, testUserID, "lib1", "External", 10)
+	db.upsertLibrary(ctx,"lib1", "External", 10)
 	seedAsset(t, db, "a-existing", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z")
 
 	svc.doUserIncrementalSync(ctx, testUserID, immich)
@@ -862,7 +862,7 @@ func TestSyncLibraries(t *testing.T) {
 
 	svc.syncLibraries(ctx, testUserID, immich)
 
-	libs, err := db.getLibraries(ctx, testUserID)
+	libs, err := db.getLibraries(ctx)
 	if err != nil {
 		t.Fatalf("getLibraries: %v", err)
 	}
@@ -890,7 +890,7 @@ func TestSyncLibraries403Graceful(t *testing.T) {
 		t.Error("expected error on 403")
 	}
 
-	libs, _ := db.getLibraries(ctx, testUserID)
+	libs, _ := db.getLibraries(ctx)
 	if len(libs) != 0 {
 		t.Errorf("expected 0 libraries after 403, got %d", len(libs))
 	}
@@ -939,7 +939,7 @@ func TestSyncLibrariesDeletesStale(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 
-	db.upsertLibrary(ctx, testUserID, "old-lib", "Old Library", 10)
+	db.upsertLibrary(ctx,"old-lib", "Old Library", 10)
 
 	factory, immich := newMockImmichFactory(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/libraries" {
@@ -954,7 +954,7 @@ func TestSyncLibrariesDeletesStale(t *testing.T) {
 	svc := newSyncService(db, factory, newNominatimClient())
 	svc.syncLibraries(ctx, testUserID, immich)
 
-	libs, _ := db.getLibraries(ctx, testUserID)
+	libs, _ := db.getLibraries(ctx)
 	if len(libs) != 1 {
 		t.Fatalf("expected 1 library, got %d", len(libs))
 	}
