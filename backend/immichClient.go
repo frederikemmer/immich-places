@@ -18,6 +18,15 @@ type ImmichClientFactory struct {
 	httpClient *http.Client
 }
 
+type ImmichHTTPError struct {
+	Operation  string
+	StatusCode int
+}
+
+func (e *ImmichHTTPError) Error() string {
+	return fmt.Sprintf("immich %s returned HTTP %d", e.Operation, e.StatusCode)
+}
+
 func newImmichClientFactory(baseURL string) *ImmichClientFactory {
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 3
@@ -196,7 +205,7 @@ func (c *ImmichClient) getLibraries(ctx context.Context) ([]ImmichLibraryRespons
 
 	if resp.StatusCode != http.StatusOK {
 		io.Copy(io.Discard, resp.Body)
-		return nil, fmt.Errorf("immich getLibraries returned HTTP %d", resp.StatusCode)
+		return nil, &ImmichHTTPError{Operation: "getLibraries", StatusCode: resp.StatusCode}
 	}
 
 	var libraries []ImmichLibraryResponse
