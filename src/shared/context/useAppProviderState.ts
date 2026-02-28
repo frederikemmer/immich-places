@@ -157,6 +157,7 @@ export function useAppProviderState(): TAppProviderState {
 
 	const {isSyncing, syncError, resyncAction} = useResync({
 		isReady,
+		syncVersion: health?.syncVersion ?? 0,
 		retryBackendAction,
 		refreshData,
 		refreshAuthAction: refreshUser
