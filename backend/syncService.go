@@ -14,7 +14,6 @@ import (
 
 const (
 	syncPageSize    = 1000
-	syncCooldown    = 30 * time.Second
 	albumFetchLimit = 5
 )
 
@@ -24,7 +23,7 @@ type SyncService struct {
 	nominatim         *NominatimClient
 	mu                sync.Mutex
 	userSyncing       map[string]bool
-	lastSyncCompleted map[string]time.Time
+	userCancels       map[string]context.CancelFunc
 	wg                sync.WaitGroup
 	shutdownCtx       context.Context
 	freqLocGeneration atomic.Int64
@@ -32,12 +31,12 @@ type SyncService struct {
 
 func newSyncService(db SyncStore, factory *ImmichClientFactory, nominatim *NominatimClient) *SyncService {
 	return &SyncService{
-		db:                db,
-		immichFactory:     factory,
-		nominatim:         nominatim,
-		userSyncing:       make(map[string]bool),
-		lastSyncCompleted: make(map[string]time.Time),
-		shutdownCtx:       context.Background(),
+		db:            db,
+		immichFactory: factory,
+		nominatim:     nominatim,
+		userSyncing:   make(map[string]bool),
+		userCancels:   make(map[string]context.CancelFunc),
+		shutdownCtx:   context.Background(),
 	}
 }
 
@@ -60,34 +59,59 @@ func (s *SyncService) acquireUserSyncLock(userID string) bool {
 func (s *SyncService) releaseUserSyncLock(userID string) {
 	s.mu.Lock()
 	s.userSyncing[userID] = false
-	s.lastSyncCompleted[userID] = time.Now()
 	s.mu.Unlock()
 }
 
-func (s *SyncService) tryStartUserSync(userID string) (string, bool) {
+func (s *SyncService) tryStartUserSync(userID string, cancel context.CancelFunc) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.userSyncing[userID] {
 		return "already syncing", false
 	}
-	if time.Since(s.lastSyncCompleted[userID]) < syncCooldown {
-		return "cooldown active", false
-	}
 	s.userSyncing[userID] = true
+	s.userCancels[userID] = cancel
 	return "", true
 }
 
+func (s *SyncService) clearUserCancel(userID string) {
+	s.mu.Lock()
+	delete(s.userCancels, userID)
+	s.mu.Unlock()
+}
+
+func (s *SyncService) cancelUserSync(userID string) {
+	s.mu.Lock()
+	cancel := s.userCancels[userID]
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	for {
+		s.mu.Lock()
+		syncing := s.userSyncing[userID]
+		s.mu.Unlock()
+		if !syncing {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func (s *SyncService) triggerUserSync(userID, apiKey string) (string, bool) {
-	reason, ok := s.tryStartUserSync(userID)
+	ctx, cancel := context.WithCancel(s.shutdownCtx)
+	reason, ok := s.tryStartUserSync(userID, cancel)
 	if !ok {
+		cancel()
 		return reason, false
 	}
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		defer s.releaseUserSyncLock(userID)
+		defer s.clearUserCancel(userID)
+		defer cancel()
 		immich := s.immichFactory.forUser(apiKey)
-		s.doUserIncrementalSync(s.shutdownCtx, userID, immich)
+		s.doUserIncrementalSync(ctx, userID, immich)
 	}()
 	return "sync started", true
 }
@@ -103,12 +127,17 @@ func (s *SyncService) clearSyncError(ctx context.Context, userID string) {
 }
 
 func (s *SyncService) startUserFullSync(ctx context.Context, userID string, immich SyncImmichAPI) {
-	if !s.acquireUserSyncLock(userID) {
-		log.Printf("Sync already in progress for user %s, skipping", userID)
+	syncCtx, cancel := context.WithCancel(ctx)
+	reason, ok := s.tryStartUserSync(userID, cancel)
+	if !ok {
+		cancel()
+		log.Printf("Sync not started for user %s: %s", userID, reason)
 		return
 	}
 	defer s.releaseUserSyncLock(userID)
-	s.doUserFullSync(ctx, userID, immich)
+	defer s.clearUserCancel(userID)
+	defer cancel()
+	s.doUserFullSync(syncCtx, userID, immich)
 }
 
 func (s *SyncService) doUserFullSync(ctx context.Context, userID string, immich SyncImmichAPI) {
@@ -131,6 +160,10 @@ func (s *SyncService) doUserFullSync(ctx context.Context, userID string, immich 
 	}
 
 	s.syncStacks(ctx, userID, immich)
+	s.syncLibraries(ctx, userID, immich)
+	if err := s.db.setSyncState(ctx, userID, "libraryIDBackfillDone", "true"); err != nil {
+		log.Printf("Failed to set libraryIDBackfillDone for user %s: %v", userID, err)
+	}
 	s.recomputeFrequentLocations(ctx, userID)
 	albumErr := s.syncAlbums(ctx, userID, immich)
 
@@ -144,11 +177,16 @@ func (s *SyncService) doUserFullSync(ctx context.Context, userID string, immich 
 }
 
 func (s *SyncService) startUserIncrementalSync(ctx context.Context, userID string, immich SyncImmichAPI) {
-	if !s.acquireUserSyncLock(userID) {
+	syncCtx, cancel := context.WithCancel(ctx)
+	_, ok := s.tryStartUserSync(userID, cancel)
+	if !ok {
+		cancel()
 		return
 	}
 	defer s.releaseUserSyncLock(userID)
-	s.doUserIncrementalSync(ctx, userID, immich)
+	defer s.clearUserCancel(userID)
+	defer cancel()
+	s.doUserIncrementalSync(syncCtx, userID, immich)
 }
 
 func (s *SyncService) doUserIncrementalSync(ctx context.Context, userID string, immich SyncImmichAPI) {
@@ -159,6 +197,16 @@ func (s *SyncService) doUserIncrementalSync(ctx context.Context, userID string, 
 	}
 	if lastSyncAt == nil {
 		log.Printf("No previous sync found for user %s, running full sync instead", userID)
+		s.doUserFullSync(ctx, userID, immich)
+		return
+	}
+
+	needsBackfill, err := s.db.needsLibraryIDBackfill(ctx, userID)
+	if err != nil {
+		log.Printf("Failed to check libraryID backfill for user %s: %v", userID, err)
+	}
+	if needsBackfill {
+		log.Printf("Assets need libraryID backfill for user %s, running full sync", userID)
 		s.doUserFullSync(ctx, userID, immich)
 		return
 	}
@@ -179,6 +227,7 @@ func (s *SyncService) doUserIncrementalSync(ctx context.Context, userID string, 
 	}
 
 	s.syncStacks(ctx, userID, immich)
+	s.syncLibraries(ctx, userID, immich)
 
 	if totalUpserted > 0 {
 		s.recomputeFrequentLocations(ctx, userID)
@@ -420,6 +469,51 @@ func (s *SyncService) fetchAndReplaceAlbumAssets(ctx context.Context, userID str
 	return nil
 }
 
+func (s *SyncService) syncLibraries(ctx context.Context, userID string, immich SyncImmichAPI) error {
+	log.Printf("Syncing libraries for user %s...", userID)
+
+	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	libraries, err := immich.getLibraries(apiCtx)
+	if err != nil {
+		log.Printf("Failed to fetch libraries for user %s (may require admin key): %v", userID, err)
+		s.db.setSyncState(ctx, userID, "hasLibraryAccess", "false")
+		return fmt.Errorf("failed to fetch libraries: %w", err)
+	}
+
+	s.db.setSyncState(ctx, userID, "hasLibraryAccess", "true")
+
+	libraryIDs := make([]string, 0, len(libraries))
+	for _, lib := range libraries {
+		libraryIDs = append(libraryIDs, lib.ID)
+		if err := s.db.upsertLibrary(ctx, lib.ID, lib.Name, lib.AssetCount); err != nil {
+			log.Printf("Failed to upsert library %s for user %s: %v", lib.ID, userID, err)
+		}
+	}
+
+	if err := s.db.deleteLibrariesNotIn(ctx, libraryIDs); err != nil {
+		log.Printf("Failed to clean up stale libraries for user %s: %v", userID, err)
+	}
+
+	log.Printf("Library sync completed for user %s: %d libraries", userID, len(libraries))
+	return nil
+}
+
+func (s *SyncService) runStartupSyncs(ctx context.Context, users []UserRow) {
+	for _, u := range users {
+		if u.ImmichAPIKey == nil {
+			continue
+		}
+		userID := u.ID
+		immich := s.immichFactory.forUser(*u.ImmichAPIKey)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.startUserIncrementalSync(ctx, userID, immich)
+		}()
+	}
+}
+
 func (s *SyncService) startPeriodicSync(ctx context.Context, intervalMS int) {
 	ticker := time.NewTicker(time.Duration(intervalMS) * time.Millisecond)
 	s.wg.Add(1)
@@ -463,6 +557,7 @@ func mapImmichToAssetRow(item ImmichAssetResponse) AssetRow {
 		Type:             item.Type,
 		OriginalFileName: item.OriginalFileName,
 		FileCreatedAt:    item.FileCreatedAt,
+		LibraryID:        item.LibraryID,
 	}
 	if item.ExifInfo != nil {
 		asset.Latitude = item.ExifInfo.Latitude

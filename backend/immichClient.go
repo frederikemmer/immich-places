@@ -187,6 +187,25 @@ func (c *ImmichClient) getAlbums(ctx context.Context) ([]ImmichAlbumResponse, er
 	return albums, nil
 }
 
+func (c *ImmichClient) getLibraries(ctx context.Context) ([]ImmichLibraryResponse, error) {
+	resp, err := c.doRequest(ctx, "GET", "/api/libraries", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		io.Copy(io.Discard, resp.Body)
+		return nil, fmt.Errorf("immich getLibraries returned HTTP %d", resp.StatusCode)
+	}
+
+	var libraries []ImmichLibraryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&libraries); err != nil {
+		return nil, fmt.Errorf("failed to decode libraries response: %w", err)
+	}
+	return libraries, nil
+}
+
 func (c *ImmichClient) getAlbumAssetIDs(ctx context.Context, albumID string) ([]string, error) {
 	resp, err := c.doRequest(ctx, "GET", "/api/albums/"+albumID+"?withoutAssets=false", nil)
 	if err != nil {

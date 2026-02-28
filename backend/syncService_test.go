@@ -245,7 +245,7 @@ func TestSyncStacksUpdatesDB(t *testing.T) {
 	}
 	svc.syncStacks(ctx, testUserID, immich)
 
-	asset, err := db.getAssetByID(ctx, testUserID,"s2")
+	asset, err := db.getAssetByID(ctx, testUserID, "s2")
 	if err != nil {
 		t.Fatalf("getAssetByID: %v", err)
 	}
@@ -341,6 +341,8 @@ func newFullMockImmichFactory(t *testing.T) (*ImmichClientFactory, *ImmichClient
 			json.NewEncoder(w).Encode([]ImmichStackResponse{})
 		case r.URL.Path == "/api/albums" && r.Method == "GET":
 			json.NewEncoder(w).Encode([]ImmichAlbumResponse{})
+		case r.URL.Path == "/api/libraries" && r.Method == "GET":
+			json.NewEncoder(w).Encode([]ImmichLibraryResponse{})
 		case r.Method == "PUT" && r.URL.Path == "/api/assets":
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -377,6 +379,10 @@ func TestDoFullSync(t *testing.T) {
 	if lastFullSync == nil {
 		t.Error("expected lastFullSyncAt to be set")
 	}
+	backfillDone, _ := db.getSyncState(ctx, testUserID, "libraryIDBackfillDone")
+	if backfillDone == nil || *backfillDone != "true" {
+		t.Errorf("expected libraryIDBackfillDone=true, got %v", backfillDone)
+	}
 }
 
 func TestDoIncrementalSyncFallsBackToFull(t *testing.T) {
@@ -408,6 +414,25 @@ func TestDoIncrementalSync(t *testing.T) {
 	total, _ := db.countAssets(ctx, testUserID)
 	if total != 1 {
 		t.Errorf("expected 1 asset after incremental sync, got %d", total)
+	}
+}
+
+func TestDoIncrementalSyncForcesFullWhenBackfillNeeded(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	factory, immich := newFullMockImmichFactory(t)
+	nom := newMockNominatimServer(t)
+	svc := newSyncService(db, factory, nom)
+
+	db.setSyncState(ctx, testUserID, "lastSyncAt", "2024-01-01T00:00:00Z")
+	db.upsertLibrary(ctx, "lib1", "External", 10)
+	seedAsset(t, db, "a-existing", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z")
+
+	svc.doUserIncrementalSync(ctx, testUserID, immich)
+
+	lastFullSync, _ := db.getSyncState(ctx, testUserID, "lastFullSyncAt")
+	if lastFullSync == nil {
+		t.Error("expected full sync when libraryID backfill is needed")
 	}
 }
 
@@ -463,6 +488,127 @@ func TestAcquireReleaseSyncLock(t *testing.T) {
 	if !svc.acquireUserSyncLock(testUserID) {
 		t.Error("expected acquire after release to succeed")
 	}
+}
+
+func TestTryStartUserSyncStoresCancel(t *testing.T) {
+	factory, _ := newFullMockImmichFactory(t)
+	svc := newSyncService(newTestDB(t), factory, newNominatimClient())
+
+	cancelWasCalled := false
+	cancel := func() {
+		cancelWasCalled = true
+	}
+
+	reason, ok := svc.tryStartUserSync(testUserID, cancel)
+	if !ok {
+		t.Fatalf("expected sync to start, got reason %q", reason)
+	}
+
+	svc.mu.Lock()
+	storedCancel := svc.userCancels[testUserID]
+	svc.mu.Unlock()
+
+	if storedCancel == nil {
+		t.Fatal("expected cancel function to be stored")
+	}
+
+	storedCancel()
+	if !cancelWasCalled {
+		t.Error("expected stored cancel function to execute")
+	}
+}
+
+func TestRunStartupSyncsStartsUsersConcurrently(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+
+	firstUserID := "startup-user-1"
+	secondUserID := "startup-user-2"
+	firstKey := "startup-key-1"
+	secondKey := "startup-key-2"
+
+	if err := db.createUser(ctx, firstUserID, "startup1@example.com", "hashed"); err != nil {
+		t.Fatalf("create first startup user: %v", err)
+	}
+	if err := db.createUser(ctx, secondUserID, "startup2@example.com", "hashed"); err != nil {
+		t.Fatalf("create second startup user: %v", err)
+	}
+	if err := db.updateImmichAPIKey(ctx, firstUserID, &firstKey); err != nil {
+		t.Fatalf("set first API key: %v", err)
+	}
+	if err := db.updateImmichAPIKey(ctx, secondUserID, &secondKey); err != nil {
+		t.Fatalf("set second API key: %v", err)
+	}
+	if err := db.setSyncState(ctx, firstUserID, "lastSyncAt", "2024-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("set first lastSyncAt: %v", err)
+	}
+	if err := db.setSyncState(ctx, secondUserID, "lastSyncAt", "2024-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("set second lastSyncAt: %v", err)
+	}
+
+	firstStarted := make(chan struct{}, 1)
+	secondStarted := make(chan struct{}, 1)
+	releaseFirst := make(chan struct{})
+
+	factory, _ := newMockImmichFactory(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/search/metadata":
+			apiKey := r.Header.Get("x-api-key")
+			if apiKey == firstKey {
+				select {
+				case firstStarted <- struct{}{}:
+				default:
+				}
+				<-releaseFirst
+			}
+			if apiKey == secondKey {
+				select {
+				case secondStarted <- struct{}{}:
+				default:
+				}
+			}
+			json.NewEncoder(w).Encode(ImmichSearchResponse{
+				Assets: struct {
+					Items    []ImmichAssetResponse `json:"items"`
+					NextPage *string               `json:"nextPage"`
+				}{
+					Items:    []ImmichAssetResponse{},
+					NextPage: nil,
+				},
+			})
+		case r.URL.Path == "/api/stacks":
+			json.NewEncoder(w).Encode([]ImmichStackResponse{})
+		case r.URL.Path == "/api/albums":
+			json.NewEncoder(w).Encode([]ImmichAlbumResponse{})
+		case r.URL.Path == "/api/libraries":
+			json.NewEncoder(w).Encode([]ImmichLibraryResponse{})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	svc := newSyncService(db, factory, newNominatimClient())
+	users := []UserRow{
+		{ID: firstUserID, ImmichAPIKey: &firstKey},
+		{ID: secondUserID, ImmichAPIKey: &secondKey},
+	}
+
+	svc.runStartupSyncs(ctx, users)
+
+	select {
+	case <-firstStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first startup sync did not start")
+	}
+
+	select {
+	case <-secondStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second startup sync did not start while first was blocked")
+	}
+
+	close(releaseFirst)
+	svc.wg.Wait()
 }
 
 func TestRecomputeFrequentLocations(t *testing.T) {
@@ -580,6 +726,102 @@ func TestMapImmichToAssetRowWithExif(t *testing.T) {
 	}
 	if row.DateTimeOriginal == nil || *row.DateTimeOriginal != "2024-01-01T10:00:00Z" {
 		t.Errorf("expected dateTimeOriginal, got %v", row.DateTimeOriginal)
+	}
+}
+
+func TestMapImmichToAssetRowWithLibraryID(t *testing.T) {
+	item := ImmichAssetResponse{
+		ID:               "a1",
+		Type:             "IMAGE",
+		OriginalFileName: "photo.jpg",
+		FileCreatedAt:    "2024-01-01T00:00:00Z",
+		LibraryID:        ptr("lib-123"),
+	}
+
+	row := mapImmichToAssetRow(item)
+	if row.LibraryID == nil || *row.LibraryID != "lib-123" {
+		t.Errorf("expected libraryID 'lib-123', got %v", row.LibraryID)
+	}
+}
+
+func TestSyncLibraries(t *testing.T) {
+	ctx := context.Background()
+
+	factory, immich := newMockImmichFactory(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/libraries" {
+			json.NewEncoder(w).Encode([]ImmichLibraryResponse{
+				{ID: "lib1", Name: "Photos", AssetCount: 100},
+				{ID: "lib2", Name: "Archive", AssetCount: 50},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	})
+
+	db := newTestDB(t)
+	svc := newSyncService(db, factory, newNominatimClient())
+
+	svc.syncLibraries(ctx, testUserID, immich)
+
+	libs, err := db.getLibraries(ctx, testUserID)
+	if err != nil {
+		t.Fatalf("getLibraries: %v", err)
+	}
+	if len(libs) != 2 {
+		t.Fatalf("expected 2 libraries, got %d", len(libs))
+	}
+}
+
+func TestSyncLibraries403Graceful(t *testing.T) {
+	ctx := context.Background()
+
+	factory, immich := newMockImmichFactoryNoRetry(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/libraries" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		http.NotFound(w, r)
+	})
+
+	db := newTestDB(t)
+	svc := newSyncService(db, factory, newNominatimClient())
+
+	err := svc.syncLibraries(ctx, testUserID, immich)
+	if err == nil {
+		t.Error("expected error on 403")
+	}
+
+	libs, _ := db.getLibraries(ctx, testUserID)
+	if len(libs) != 0 {
+		t.Errorf("expected 0 libraries after 403, got %d", len(libs))
+	}
+}
+
+func TestSyncLibrariesDeletesStale(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+
+	db.upsertLibrary(ctx, "old-lib", "Old Library", 10)
+
+	factory, immich := newMockImmichFactory(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/libraries" {
+			json.NewEncoder(w).Encode([]ImmichLibraryResponse{
+				{ID: "new-lib", Name: "New Library", AssetCount: 20},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	})
+
+	svc := newSyncService(db, factory, newNominatimClient())
+	svc.syncLibraries(ctx, testUserID, immich)
+
+	libs, _ := db.getLibraries(ctx, testUserID)
+	if len(libs) != 1 {
+		t.Fatalf("expected 1 library, got %d", len(libs))
+	}
+	if libs[0].LibraryID != "new-lib" {
+		t.Errorf("expected 'new-lib', got %s", libs[0].LibraryID)
 	}
 }
 
@@ -839,7 +1081,7 @@ func TestSyncStacksWithStacks(t *testing.T) {
 	svc := newSyncService(db, factory, newNominatimClient())
 	svc.syncStacks(ctx, testUserID, immich)
 
-	stackID, _ := db.getAssetStackID(ctx, testUserID,"a2")
+	stackID, _ := db.getAssetStackID(ctx, testUserID, "a2")
 	if stackID == nil {
 		t.Error("expected a2 to have a stackID after sync")
 	}
