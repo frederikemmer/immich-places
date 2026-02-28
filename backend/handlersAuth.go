@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -257,8 +256,13 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 		keyToStore = req.ImmichAPIKey
 	}
 
+	if req.ImmichAPIKey != nil && h.syncService != nil {
+		if !h.syncService.cancelUserSync(user.ID) {
+			log.Printf("UpdateSettings: timed out waiting for sync cancellation for user %s", user.ID)
+		}
+	}
+
 	if keyToStore != nil {
-		h.syncService.cancelUserSync(user.ID)
 		if err := h.db.deleteUserSyncData(r.Context(), user.ID); err != nil {
 			log.Printf("UpdateSettings: failed to clear sync data: %v", err)
 			writeError(w, http.StatusInternalServerError, "failed to clear previous sync data")
@@ -280,14 +284,14 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 	}
 
 	if keyToStore != nil {
-		immich := h.immichFactory.forUser(*keyToStore)
-		syncCtx, syncCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer syncCancel()
-		if err := h.syncService.syncLibraries(syncCtx, user.ID, immich); err != nil {
-			log.Printf("UpdateSettings: initial library sync failed: %v", err)
+		if h.syncService != nil {
+			immich := h.immichFactory.forUser(*keyToStore)
+			if err := h.syncService.syncLibraries(r.Context(), user.ID, immich); err != nil {
+				log.Printf("UpdateSettings: initial library sync failed: %v", err)
+			}
+			h.syncService.triggerUserSync(user.ID, *keyToStore)
 		}
-		h.syncService.triggerUserSync(user.ID, *keyToStore)
-	} else {
+	} else if req.ImmichAPIKey != nil {
 		if err := h.db.setSyncState(r.Context(), user.ID, "hasLibraryAccess", "false"); err != nil {
 			log.Printf("UpdateSettings: failed to reset hasLibraryAccess for user %s: %v", user.ID, err)
 		}
