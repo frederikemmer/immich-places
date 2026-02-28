@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -34,13 +35,33 @@ func TestRegisterSuccess(t *testing.T) {
 		t.Fatalf("expected 201, got %d (body: %s)", rec.Code, rec.Body.String())
 	}
 
+	bodyBytes := rec.Body.Bytes()
+
 	var resp TMeResponse
-	json.NewDecoder(rec.Body).Decode(&resp)
+	if err := json.Unmarshal(bodyBytes, &resp); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
 	if resp.User.Email != "new@example.com" {
 		t.Errorf("expected email new@example.com, got %s", resp.User.Email)
 	}
 	if resp.HasImmichAPIKey {
 		t.Error("expected hasImmichAPIKey=false for new user")
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		t.Fatalf("decode register payload: %v", err)
+	}
+	hasLibrariesValue, ok := payload["hasLibraries"]
+	if !ok {
+		t.Error("expected hasLibraries field to be present in register response")
+	}
+	hasLibraries, ok := hasLibrariesValue.(bool)
+	if !ok {
+		t.Errorf("expected hasLibraries to be a boolean, got %T", hasLibrariesValue)
+	}
+	if hasLibraries {
+		t.Error("expected hasLibraries=false for new user")
 	}
 
 	cookies := rec.Result().Cookies()
@@ -158,6 +179,44 @@ func TestLoginSuccess(t *testing.T) {
 	}
 }
 
+func TestLoginIncludesLibraryAccessFlag(t *testing.T) {
+	h, db := newTestAuthHandlers(t)
+	ctx := context.Background()
+
+	regBody := `{"email":"admin@example.com","password":"securepass123"}`
+	regReq := httptest.NewRequest("POST", "/auth/register", strings.NewReader(regBody))
+	regReq.Header.Set("Content-Type", "application/json")
+	regRec := httptest.NewRecorder()
+	h.handleRegister(regRec, regReq)
+	if regRec.Code != http.StatusCreated {
+		t.Fatalf("registration failed: %d", regRec.Code)
+	}
+
+	user, err := db.getUserByEmail(ctx, "admin@example.com")
+	if err != nil || user == nil {
+		t.Fatalf("failed to load registered user: %v", err)
+	}
+	db.setSyncState(ctx, user.ID, "hasLibraryAccess", "true")
+
+	loginBody := `{"email":"admin@example.com","password":"securepass123"}`
+	loginReq := httptest.NewRequest("POST", "/auth/login", strings.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRec := httptest.NewRecorder()
+	h.handleLogin(loginRec, loginReq)
+
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", loginRec.Code)
+	}
+
+	var resp TMeResponse
+	if err := json.NewDecoder(loginRec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if !resp.HasLibraries {
+		t.Error("expected hasLibraries=true")
+	}
+}
+
 func TestLoginWrongPassword(t *testing.T) {
 	h, _ := newTestAuthHandlers(t)
 
@@ -266,6 +325,41 @@ func TestAuthStatus(t *testing.T) {
 	json.NewDecoder(rec.Body).Decode(&resp)
 	if !resp.RegistrationEnabled {
 		t.Error("expected registrationEnabled=true")
+	}
+}
+
+func TestUpdateSettingsClearingKeyResetsLibraryAccess(t *testing.T) {
+	h, db := newTestAuthHandlers(t)
+	ctx := context.Background()
+
+	if err := db.setSyncState(ctx, testUserID, "hasLibraryAccess", "true"); err != nil {
+		t.Fatalf("set hasLibraryAccess: %v", err)
+	}
+
+	req := withTestUser(httptest.NewRequest("PUT", "/auth/settings", strings.NewReader(`{"immichAPIKey":""}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.handleUpdateSettings(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var resp TMeResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.HasLibraries {
+		t.Error("expected hasLibraries=false after clearing API key")
+	}
+
+	hasAccess, err := db.getSyncState(ctx, testUserID, "hasLibraryAccess")
+	if err != nil {
+		t.Fatalf("get hasLibraryAccess: %v", err)
+	}
+	if hasAccess == nil || *hasAccess != "false" {
+		t.Fatalf("expected hasLibraryAccess=false in sync state, got %v", hasAccess)
 	}
 }
 

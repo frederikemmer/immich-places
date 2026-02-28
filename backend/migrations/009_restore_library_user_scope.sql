@@ -1,0 +1,36 @@
+-- +goose Up
+CREATE TABLE IF NOT EXISTS libraries_new (
+    userID TEXT NOT NULL REFERENCES users(ID) ON DELETE CASCADE,
+    libraryID TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    assetCount INTEGER NOT NULL DEFAULT 0,
+    isHidden INTEGER NOT NULL DEFAULT 0,
+    syncedAt TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (userID, libraryID)
+);
+
+INSERT OR IGNORE INTO libraries_new (userID, libraryID, name, assetCount, isHidden, syncedAt)
+SELECT a.userID, l.libraryID, l.name, l.assetCount, l.isHidden, l.syncedAt
+FROM libraries l
+JOIN assets a ON a.libraryID = l.libraryID
+WHERE a.userID IS NOT NULL;
+
+DROP TABLE libraries;
+ALTER TABLE libraries_new RENAME TO libraries;
+
+-- +goose Down
+CREATE TABLE IF NOT EXISTS libraries_old (
+    libraryID TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    assetCount INTEGER NOT NULL DEFAULT 0,
+    isHidden INTEGER NOT NULL DEFAULT 0,
+    syncedAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT OR IGNORE INTO libraries_old (libraryID, name, assetCount, isHidden, syncedAt)
+SELECT libraryID, name, assetCount, isHidden, syncedAt
+FROM libraries
+ORDER BY syncedAt DESC;
+
+DROP TABLE libraries;
+ALTER TABLE libraries_old RENAME TO libraries;

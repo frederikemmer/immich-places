@@ -2,6 +2,7 @@
 
 import {useCallback, useEffect, useRef} from 'react';
 
+import {useAuth} from '@/features/auth/AuthContext';
 import {useSelectionCallbacks} from '@/features/selection/useSelectionCallbacks';
 import {useSelectionController} from '@/features/selection/useSelectionController';
 import {useCatalogSuggestions} from '@/features/suggestions/useCatalogSuggestions';
@@ -63,6 +64,7 @@ function useCatalogRefreshData({
 }
 
 export function useAppProviderState(): TAppProviderState {
+	const {refreshUser} = useAuth();
 	const {isReady, health, error: backendError, retry: retryBackendAction, refreshHealth} = useBackendStatus();
 
 	const {
@@ -138,7 +140,7 @@ export function useAppProviderState(): TAppProviderState {
 		albums: catalogDomain.albums
 	});
 
-	const {loadAlbumsAction, loadPageAction} = catalogDomain;
+	const {loadAlbumsAction, loadPageAction, clearCatalog: clearCatalogDomainAction} = catalogDomain;
 	const getCurrentPage = useCallback(() => catalogDomain.currentPage, [catalogDomain.currentPage]);
 	const refreshData = useCatalogRefreshData({
 		loadAlbumsAction,
@@ -150,8 +152,14 @@ export function useAppProviderState(): TAppProviderState {
 	const {isSyncing, syncError, resyncAction} = useResync({
 		isReady,
 		retryBackendAction,
-		refreshData
+		refreshData,
+		refreshAuthAction: refreshUser
 	});
+
+	const clearCatalogAction = useCallback(() => {
+		clearCatalogDomainAction();
+		clearSelectionAction();
+	}, [clearCatalogDomainAction, clearSelectionAction]);
 
 	const backendValue = useBackendValue({
 		isReady,
@@ -160,7 +168,9 @@ export function useAppProviderState(): TAppProviderState {
 		retryBackendAction,
 		isSyncing,
 		syncError,
-		resyncAction
+		resyncAction,
+		refreshDataAction: refreshData,
+		clearCatalogAction
 	});
 
 	const viewValue = useViewValue({

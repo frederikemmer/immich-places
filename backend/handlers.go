@@ -83,6 +83,17 @@ func requireImmichClient(r *http.Request, factory *ImmichClientFactory) (*Immich
 	return factory.forUser(*user.ImmichAPIKey), user, nil
 }
 
+func (h *Handlers) ensureAssetVisible(ctx context.Context, userID, assetID string) error {
+	asset, err := h.db.getAssetByID(ctx, userID, assetID)
+	if err != nil {
+		return err
+	}
+	if asset == nil {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (h *Handlers) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
 		Status:    "ok",
@@ -206,6 +217,10 @@ func (h *Handlers) handleGetMapMarkers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		boundsReq := TViewportBoundsRequest{North: n, South: s, East: e, West: w2}
+		if err := validate.Struct(boundsReq); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid bounds: latitude must be between -90 and 90, south must be <= north")
+			return
+		}
 		bounds = &TViewportBounds{North: n, South: s, East: boundsReq.East, West: boundsReq.West}
 	}
 
@@ -229,9 +244,17 @@ func (h *Handlers) handleGetThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, _, err := requireImmichClient(r, h.immichFactory)
+	client, user, err := requireImmichClient(r, h.immichFactory)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	if err := h.ensureAssetVisible(r.Context(), user.ID, assetID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "asset not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to query asset")
 		return
 	}
 
@@ -250,9 +273,17 @@ func (h *Handlers) handleGetPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, _, err := requireImmichClient(r, h.immichFactory)
+	client, user, err := requireImmichClient(r, h.immichFactory)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	if err := h.ensureAssetVisible(r.Context(), user.ID, assetID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "asset not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to query asset")
 		return
 	}
 
@@ -287,6 +318,14 @@ func (h *Handlers) handleUpdateLocation(w http.ResponseWriter, r *http.Request) 
 	client, user, clientErr := requireImmichClient(r, h.immichFactory)
 	if clientErr != nil {
 		writeError(w, http.StatusForbidden, clientErr.Error())
+		return
+	}
+	if err := h.ensureAssetVisible(r.Context(), user.ID, assetID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "asset not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to query asset")
 		return
 	}
 
@@ -437,11 +476,7 @@ func (h *Handlers) handleTriggerSync(w http.ResponseWriter, r *http.Request) {
 
 	reason, ok := h.syncService.triggerUserSync(user.ID, *user.ImmichAPIKey)
 	if !ok {
-		status := http.StatusOK
-		if reason == "cooldown active" {
-			status = http.StatusTooManyRequests
-		}
-		writeJSON(w, status, map[string]string{"status": reason})
+		writeJSON(w, http.StatusOK, map[string]string{"status": reason})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": reason})
