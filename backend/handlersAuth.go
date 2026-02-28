@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -139,12 +140,18 @@ func (h *AuthHandlers) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	markerCount, err := h.db.countMapMarkers(r.Context(), userID, "", nil)
+	if err != nil {
+		log.Printf("Register: failed to count map markers for user %s: %v", userID, err)
+	}
 	writeJSON(w, http.StatusCreated, TMeResponse{
 		User: UserRow{
 			ID:    userID,
 			Email: req.Email,
 		},
 		HasImmichAPIKey: false,
+		HasLibraries:    false,
+		MapMarkerCount:  markerCount,
 	})
 }
 
@@ -183,9 +190,19 @@ func (h *AuthHandlers) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hasLibAccess, err := h.db.getSyncState(r.Context(), user.ID, "hasLibraryAccess")
+	if err != nil {
+		log.Printf("Login: failed to get hasLibraryAccess for user %s: %v", user.ID, err)
+	}
+	markerCount, markerErr := h.db.countMapMarkers(r.Context(), user.ID, "", nil)
+	if markerErr != nil {
+		log.Printf("Login: failed to count map markers for user %s: %v", user.ID, markerErr)
+	}
 	writeJSON(w, http.StatusOK, TMeResponse{
 		User:            *user,
 		HasImmichAPIKey: user.ImmichAPIKey != nil,
+		HasLibraries:    hasLibAccess != nil && *hasLibAccess == "true",
+		MapMarkerCount:  markerCount,
 	})
 }
 
@@ -206,9 +223,19 @@ func (h *AuthHandlers) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
+	hasLibAccess, err := h.db.getSyncState(r.Context(), user.ID, "hasLibraryAccess")
+	if err != nil {
+		log.Printf("Me: failed to get hasLibraryAccess for user %s: %v", user.ID, err)
+	}
+	markerCount, markerErr := h.db.countMapMarkers(r.Context(), user.ID, "", nil)
+	if markerErr != nil {
+		log.Printf("Me: failed to count map markers for user %s: %v", user.ID, markerErr)
+	}
 	writeJSON(w, http.StatusOK, TMeResponse{
 		User:            *user,
 		HasImmichAPIKey: user.ImmichAPIKey != nil,
+		HasLibraries:    hasLibAccess != nil && *hasLibAccess == "true",
+		MapMarkerCount:  markerCount,
 	})
 }
 
@@ -245,10 +272,39 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 		keyToStore = req.ImmichAPIKey
 	}
 
+	shouldReleaseSyncLock := false
+	releaseSyncLock := func() {
+		if !shouldReleaseSyncLock || h.syncService == nil {
+			return
+		}
+		h.syncService.releaseUserSyncLock(user.ID)
+		shouldReleaseSyncLock = false
+	}
+	defer releaseSyncLock()
+
+	if keyToStore != nil && h.syncService != nil {
+		lockCtx, lockCancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer lockCancel()
+		if err := h.syncService.pauseUserSync(lockCtx, user.ID); err != nil {
+			log.Printf("UpdateSettings: failed to pause sync: %v", err)
+			writeError(w, http.StatusServiceUnavailable, "failed to pause active sync")
+			return
+		}
+		shouldReleaseSyncLock = true
+	}
+
 	if err := h.db.updateImmichAPIKey(r.Context(), user.ID, keyToStore); err != nil {
 		log.Printf("UpdateSettings: failed to update API key: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
+	}
+
+	if keyToStore != nil {
+		if err := h.db.deleteUserSyncData(r.Context(), user.ID); err != nil {
+			log.Printf("UpdateSettings: failed to clear sync data: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to clear previous sync data")
+			return
+		}
 	}
 
 	updated, err := h.db.getUserByID(r.Context(), user.ID)
@@ -259,11 +315,34 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 	}
 
 	if keyToStore != nil {
-		h.syncService.triggerUserSync(user.ID, *keyToStore)
+		if h.syncService != nil {
+			immich := h.immichFactory.forUser(*keyToStore)
+			syncCtx, syncCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer syncCancel()
+			if err := h.syncService.syncLibraries(syncCtx, user.ID, immich); err != nil {
+				log.Printf("UpdateSettings: initial library sync failed: %v", err)
+			}
+			releaseSyncLock()
+			h.syncService.triggerUserSync(user.ID, *keyToStore)
+		}
+	} else if req.ImmichAPIKey != nil {
+		if err := h.db.setSyncState(r.Context(), user.ID, "hasLibraryAccess", "false"); err != nil {
+			log.Printf("UpdateSettings: failed to reset hasLibraryAccess for user %s: %v", user.ID, err)
+		}
 	}
 
+	hasLibAccess, err := h.db.getSyncState(r.Context(), user.ID, "hasLibraryAccess")
+	if err != nil {
+		log.Printf("UpdateSettings: failed to get hasLibraryAccess for user %s: %v", user.ID, err)
+	}
+	markerCount, markerErr := h.db.countMapMarkers(r.Context(), user.ID, "", nil)
+	if markerErr != nil {
+		log.Printf("UpdateSettings: failed to count map markers for user %s: %v", user.ID, markerErr)
+	}
 	writeJSON(w, http.StatusOK, TMeResponse{
 		User:            *updated,
 		HasImmichAPIKey: updated.ImmichAPIKey != nil,
+		HasLibraries:    hasLibAccess != nil && *hasLibAccess == "true",
+		MapMarkerCount:  markerCount,
 	})
 }

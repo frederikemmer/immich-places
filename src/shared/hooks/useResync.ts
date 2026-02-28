@@ -1,8 +1,5 @@
 'use client';
 
-/**
- * Shared resync hook for running backend synchronization and updating local state.
- */
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import {fetchSyncStatus, triggerSync} from '@/shared/services/backendApi';
@@ -14,12 +11,8 @@ import {
 	RESYNC_MAX_POLL_DURATION_MS
 } from '@/utils/resync';
 
-/**
- * Polls sync status until sync finishes or a hard timeout is reached.
- *
- * @param controller - Abort signal controller allowing callers to cancel polling.
- * @returns Resolves when sync is no longer in progress or timeout is reached.
- */
+const SYNC_VERSION_STORAGE_KEY = 'syncVersion';
+
 async function pollUntilDone(controller: AbortController): Promise<void> {
 	const startTime = Date.now();
 	let delayMs = RESYNC_INITIAL_POLL_DELAY_MS;
@@ -37,42 +30,51 @@ async function pollUntilDone(controller: AbortController): Promise<void> {
 	}
 }
 
-/**
- * Resync caller dependencies consumed by the hook.
- *
- * - `retryBackendAction` re-runs backend connectivity or auth checks.
- * - `refreshData` refetches data once sync completes.
- */
+function getStoredSyncVersion(): number {
+	try {
+		const raw = localStorage.getItem(SYNC_VERSION_STORAGE_KEY);
+		if (raw === null) {
+			return 0;
+		}
+		const parsed = parseInt(raw, 10);
+		if (Number.isFinite(parsed)) {
+			return parsed;
+		}
+	} catch {
+		// localStorage unavailable (SSR, privacy mode)
+	}
+	return 0;
+}
+
+function setStoredSyncVersion(version: number): void {
+	try {
+		localStorage.setItem(SYNC_VERSION_STORAGE_KEY, String(version));
+	} catch {
+		// localStorage unavailable
+	}
+}
+
 type TUseResyncArgs = {
 	isReady: boolean;
+	syncVersion: number;
 	retryBackendAction: () => Promise<void>;
 	refreshData: () => Promise<void>;
+	refreshAuthAction: () => Promise<void>;
 };
 
-/**
- * Return shape for the resync hook.
- *
- * - `isSyncing` indicates whether a resync request is actively running.
- * - `syncError` stores the last sync error message, or `null` when none exists.
- * - `resyncAction` executes a full resync flow with status polling.
- */
 type TUseResyncResult = {
 	isSyncing: boolean;
 	syncError: string | null;
 	resyncAction: () => Promise<void>;
 };
 
-/**
- * Execute backend resync cycles and refresh application data after completion.
- *
- * Starts a sync when needed, then polls status with exponential backoff until the backend
- * reports completion or timeout. Errors are exposed through `syncError` for UI rendering.
- *
- * @param retryBackendAction - Hook consumer function to re-check backend prerequisites.
- * @param refreshData - Hook consumer function to refresh local application data after sync.
- * @returns Whether syncing is active, current sync error, and an action to trigger resync.
- */
-export function useResync({isReady, retryBackendAction, refreshData}: TUseResyncArgs): TUseResyncResult {
+export function useResync({
+	isReady,
+	syncVersion,
+	retryBackendAction,
+	refreshData,
+	refreshAuthAction
+}: TUseResyncArgs): TUseResyncResult {
 	const [isSyncing, setIsSyncing] = useState(false);
 	const [syncError, setSyncError] = useState<string | null>(null);
 	const isSyncingRef = useRef(false);
@@ -83,10 +85,13 @@ export function useResync({isReady, retryBackendAction, refreshData}: TUseResync
 	retryBackendActionRef.current = retryBackendAction;
 	const refreshDataRef = useRef(refreshData);
 	refreshDataRef.current = refreshData;
+	const refreshAuthActionRef = useRef(refreshAuthAction);
+	refreshAuthActionRef.current = refreshAuthAction;
 
 	const reloadData = useCallback(async () => {
 		await retryBackendActionRef.current();
 		await refreshDataRef.current();
+		await refreshAuthActionRef.current();
 	}, []);
 
 	const runSyncFlow = useCallback(
@@ -107,9 +112,9 @@ export function useResync({isReady, retryBackendAction, refreshData}: TUseResync
 	);
 
 	const executeSync = useCallback(
-		async (shouldStartSync: boolean): Promise<void> => {
+		async (shouldStartSync: boolean): Promise<boolean> => {
 			if (isSyncingRef.current) {
-				return;
+				return false;
 			}
 			isSyncingRef.current = true;
 			setIsSyncing(true);
@@ -118,11 +123,13 @@ export function useResync({isReady, retryBackendAction, refreshData}: TUseResync
 			const controller = new AbortController();
 			abortRef.current = controller;
 
+			let succeeded = false;
 			try {
 				await runSyncFlow(controller, shouldStartSync);
+				succeeded = true;
 			} catch (error) {
 				if (isAbortError(error)) {
-					return;
+					return false;
 				}
 				setSyncError(error instanceof Error ? error.message : 'Sync failed');
 			} finally {
@@ -132,6 +139,7 @@ export function useResync({isReady, retryBackendAction, refreshData}: TUseResync
 				isSyncingRef.current = false;
 				setIsSyncing(false);
 			}
+			return succeeded;
 		},
 		[runSyncFlow]
 	);
@@ -147,11 +155,22 @@ export function useResync({isReady, retryBackendAction, refreshData}: TUseResync
 	}, []);
 
 	useEffect(() => {
-		if (isReady && !initialSyncCheckDoneRef.current) {
-			initialSyncCheckDoneRef.current = true;
+		if (!isReady || initialSyncCheckDoneRef.current || syncVersion === 0) {
+			return;
+		}
+		initialSyncCheckDoneRef.current = true;
+
+		const storedVersion = getStoredSyncVersion();
+		if (syncVersion > storedVersion) {
+			void executeSync(true).then(succeeded => {
+				if (succeeded) {
+					setStoredSyncVersion(syncVersion);
+				}
+			});
+		} else {
 			void executeSync(false);
 		}
-	}, [isReady, executeSync]);
+	}, [isReady, syncVersion, executeSync]);
 
 	return {isSyncing, syncError, resyncAction};
 }

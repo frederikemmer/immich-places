@@ -7,6 +7,7 @@ import {
 	isAlbumRow,
 	isAssetPageInfo,
 	isHealthResponse,
+	isLibraryRow,
 	isMapMarker,
 	isPaginatedAssets,
 	isSyncStatus,
@@ -16,13 +17,14 @@ import {
 } from '@/shared/services/backendApi.guards';
 import {getBackendBaseURL} from '@/utils/backendUrls';
 import {normalizePositiveInteger} from '@/utils/math';
-import {DEFAULT_PAGE_SIZE} from '@/utils/view';
+import {DEFAULT_PAGE_SIZE, DEFAULT_VISIBLE_MARKER_LIMIT} from '@/utils/view';
 
 import type {TAlbumRow} from '@/shared/types/album';
 import type {TRequestOptions, TViewportBounds} from '@/shared/types/api';
 import type {TAssetPageInfo, TPaginatedAssets} from '@/shared/types/asset';
 import type {TAuthErrorCode} from '@/shared/types/auth';
 import type {THealthResponse} from '@/shared/types/health';
+import type {TLibraryRow} from '@/shared/types/library';
 import type {TGPSFilter, TMapMarker} from '@/shared/types/map';
 import type {TLocationCluster, TSuggestionsResponse} from '@/shared/types/suggestion';
 
@@ -147,19 +149,22 @@ export async function fetchAlbums(gpsFilter: TGPSFilter, opts: TRequestOptions =
  *
  * @param albumID - Optional album id to filter map markers.
  * @param bounds - Optional viewport bounds to reduce marker fetch scope.
+ * @param limit - Maximum number of markers to return.
  * @param opts - Optional request options such as abort signal and timeout override.
- * @returns Array of map marker objects.
+ * @returns Map markers array.
  * @throws Error when the request fails or response payload is invalid.
  */
 export async function fetchMapMarkers(
 	albumID?: string,
 	bounds?: TViewportBounds | null,
+	limit: number = DEFAULT_VISIBLE_MARKER_LIMIT,
 	opts: TRequestOptions = {}
 ): Promise<TMapMarker[]> {
 	const params = new URLSearchParams();
 	if (albumID) {
 		params.set('albumID', albumID);
 	}
+	addIfNumber(params, 'limit', limit);
 	if (bounds) {
 		addIfNumber(params, 'north', bounds.north);
 		addIfNumber(params, 'south', bounds.south);
@@ -344,4 +349,43 @@ export async function fetchSyncStatus(opts: TRequestOptions = {}): Promise<{sync
 		throw new Error(`Failed to fetch sync status: ${response.status}`);
 	}
 	return parseJSON(response, isSyncStatus, 'Invalid sync status response payload');
+}
+
+export async function fetchLibraries(opts: TRequestOptions = {}): Promise<TLibraryRow[]> {
+	const response = await backendFetch(`${BASE}/libraries`, {}, opts);
+	if (!response.ok) {
+		throw new Error(`Failed to fetch libraries: ${response.status}`);
+	}
+	return parseJSON(
+		response,
+		(value): value is TLibraryRow[] => Array.isArray(value) && value.every(isLibraryRow),
+		'Invalid libraries response payload'
+	);
+}
+
+export async function updateLibrary(libraryID: string, isHidden: boolean, opts: TRequestOptions = {}): Promise<void> {
+	const response = await backendFetch(
+		`${BASE}/libraries/${encodeURIComponent(libraryID)}`,
+		{
+			method: 'PUT',
+			headers: {'Content-Type': 'application/json'}, //eslint-disable-line
+			body: JSON.stringify({isHidden})
+		},
+		opts
+	);
+	if (!response.ok) {
+		throw new Error(`Failed to update library: ${response.status}`);
+	}
+}
+
+export async function refreshLibraries(opts: TRequestOptions = {}): Promise<TLibraryRow[]> {
+	const response = await backendFetch(`${BASE}/libraries/refresh`, {method: 'POST'}, opts);
+	if (!response.ok) {
+		throw new Error(`Failed to refresh libraries: ${response.status}`);
+	}
+	return parseJSON(
+		response,
+		(value): value is TLibraryRow[] => Array.isArray(value) && value.every(isLibraryRow),
+		'Invalid libraries response payload'
+	);
 }

@@ -13,6 +13,8 @@ export type TBackendContextValue = {
 	isSyncing: boolean;
 	syncError: string | null;
 	resyncAction: () => Promise<void>;
+	refreshDataAction: () => Promise<void>;
+	clearCatalogAction: () => void;
 };
 
 export type TViewContextValue = {
@@ -22,6 +24,8 @@ export type TViewContextValue = {
 	setPageSizeAction: (size: number) => void;
 	gridColumns: number;
 	setGridColumnsAction: (cols: number) => void;
+	visibleMarkerLimit: number;
+	setVisibleMarkerLimitAction: (limit: number) => void;
 	viewMode: TViewMode;
 	setViewModeAction: (mode: TViewMode) => void;
 	selectedAlbumID: string | null;
