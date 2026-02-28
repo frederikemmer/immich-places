@@ -47,6 +47,7 @@ type TUseResyncArgs = {
 	isReady: boolean;
 	retryBackendAction: () => Promise<void>;
 	refreshData: () => Promise<void>;
+	refreshAuthAction: () => Promise<void>;
 };
 
 /**
@@ -72,7 +73,12 @@ type TUseResyncResult = {
  * @param refreshData - Hook consumer function to refresh local application data after sync.
  * @returns Whether syncing is active, current sync error, and an action to trigger resync.
  */
-export function useResync({isReady, retryBackendAction, refreshData}: TUseResyncArgs): TUseResyncResult {
+export function useResync({
+	isReady,
+	retryBackendAction,
+	refreshData,
+	refreshAuthAction
+}: TUseResyncArgs): TUseResyncResult {
 	const [isSyncing, setIsSyncing] = useState(false);
 	const [syncError, setSyncError] = useState<string | null>(null);
 	const isSyncingRef = useRef(false);
@@ -83,10 +89,13 @@ export function useResync({isReady, retryBackendAction, refreshData}: TUseResync
 	retryBackendActionRef.current = retryBackendAction;
 	const refreshDataRef = useRef(refreshData);
 	refreshDataRef.current = refreshData;
+	const refreshAuthActionRef = useRef(refreshAuthAction);
+	refreshAuthActionRef.current = refreshAuthAction;
 
 	const reloadData = useCallback(async () => {
 		await retryBackendActionRef.current();
 		await refreshDataRef.current();
+		await refreshAuthActionRef.current();
 	}, []);
 
 	const runSyncFlow = useCallback(

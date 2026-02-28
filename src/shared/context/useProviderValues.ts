@@ -26,7 +26,9 @@ export function useBackendValue(input: TBackendContextValue): TBackendContextVal
 			retryBackendAction: input.retryBackendAction,
 			isSyncing: input.isSyncing,
 			syncError: input.syncError,
-			resyncAction: input.resyncAction
+			resyncAction: input.resyncAction,
+			refreshDataAction: input.refreshDataAction,
+			clearCatalogAction: input.clearCatalogAction
 		}),
 		[
 			input.isReady,
@@ -35,7 +37,9 @@ export function useBackendValue(input: TBackendContextValue): TBackendContextVal
 			input.retryBackendAction,
 			input.isSyncing,
 			input.syncError,
-			input.resyncAction
+			input.resyncAction,
+			input.refreshDataAction,
+			input.clearCatalogAction
 		]
 	);
 }

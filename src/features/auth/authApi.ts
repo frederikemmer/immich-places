@@ -80,7 +80,9 @@ function isMeResponse(value: unknown): value is TMeResponse {
 	if (!isRecord(value)) {
 		return false;
 	}
-	return isAuthUser(value.user) && typeof value.hasImmichAPIKey === 'boolean';
+	return (
+		isAuthUser(value.user) && typeof value.hasImmichAPIKey === 'boolean' && typeof value.hasLibraries === 'boolean'
+	);
 }
 
 /**
