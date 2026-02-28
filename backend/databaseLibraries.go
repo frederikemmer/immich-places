@@ -6,15 +6,15 @@ import (
 	"strings"
 )
 
-func (d *Database) upsertLibrary(ctx context.Context, libraryID, name string, assetCount int) error {
+func (d *Database) upsertLibrary(ctx context.Context, userID, libraryID, name string, assetCount int) error {
 	_, err := d.db.ExecContext(ctx,
-		`INSERT INTO libraries (libraryID, name, assetCount, syncedAt)
-		VALUES (?, ?, ?, datetime('now'))
-		ON CONFLICT(libraryID) DO UPDATE SET
+		`INSERT INTO libraries (userID, libraryID, name, assetCount, syncedAt)
+		VALUES (?, ?, ?, ?, datetime('now'))
+		ON CONFLICT(userID, libraryID) DO UPDATE SET
 			name = excluded.name,
 			assetCount = excluded.assetCount,
 			syncedAt = datetime('now')`,
-		libraryID, name, assetCount,
+		userID, libraryID, name, assetCount,
 	)
 	return err
 }
@@ -22,14 +22,15 @@ func (d *Database) upsertLibrary(ctx context.Context, libraryID, name string, as
 func (d *Database) getLibraries(ctx context.Context, userID string) ([]LibraryRow, error) {
 	rows, err := d.db.QueryContext(ctx,
 		`SELECT l.libraryID, l.name, COALESCE(a.cnt, 0), l.isHidden, l.syncedAt
-		FROM libraries l
+			FROM libraries l
 		LEFT JOIN (
 			SELECT libraryID, COUNT(*) AS cnt
 			FROM assets WHERE userID = ?
 			GROUP BY libraryID
 		) a ON a.libraryID = l.libraryID
+		WHERE l.userID = ?
 		ORDER BY l.name`,
-		userID,
+		userID, userID,
 	)
 	if err != nil {
 		return nil, err
@@ -49,14 +50,14 @@ func (d *Database) getLibraries(ctx context.Context, userID string) ([]LibraryRo
 	return libraries, rows.Err()
 }
 
-func (d *Database) updateLibraryVisibility(ctx context.Context, libraryID string, isHidden bool) error {
+func (d *Database) updateLibraryVisibility(ctx context.Context, userID, libraryID string, isHidden bool) error {
 	hiddenInt := 0
 	if isHidden {
 		hiddenInt = 1
 	}
 	result, err := d.db.ExecContext(ctx,
-		"UPDATE libraries SET isHidden = ? WHERE libraryID = ?",
-		hiddenInt, libraryID,
+		"UPDATE libraries SET isHidden = ? WHERE userID = ? AND libraryID = ?",
+		hiddenInt, userID, libraryID,
 	)
 	if err != nil {
 		return err
@@ -71,29 +72,34 @@ func (d *Database) updateLibraryVisibility(ctx context.Context, libraryID string
 	return nil
 }
 
-func (d *Database) deleteLibrariesNotIn(ctx context.Context, libraryIDs []string) error {
+func (d *Database) deleteLibrariesNotIn(ctx context.Context, userID string, libraryIDs []string) error {
 	if len(libraryIDs) == 0 {
 		_, err := d.db.ExecContext(ctx,
 			`DELETE FROM libraries
-			WHERE libraryID NOT IN (
-				SELECT DISTINCT libraryID FROM assets WHERE libraryID IS NOT NULL
-			)`,
+			WHERE userID = ?
+				AND libraryID NOT IN (
+					SELECT DISTINCT libraryID FROM assets WHERE userID = ? AND libraryID IS NOT NULL
+				)`,
+			userID, userID,
 		)
 		return err
 	}
 
 	placeholders := make([]string, len(libraryIDs))
-	args := make([]interface{}, len(libraryIDs))
+	args := make([]interface{}, 0, len(libraryIDs)+2)
+	args = append(args, userID)
 	for i, libraryID := range libraryIDs {
 		placeholders[i] = "?"
-		args[i] = libraryID
+		args = append(args, libraryID)
 	}
+	args = append(args, userID)
 
 	query := fmt.Sprintf(
 		`DELETE FROM libraries
-		WHERE libraryID NOT IN (%s)
+		WHERE userID = ?
+			AND libraryID NOT IN (%s)
 			AND libraryID NOT IN (
-				SELECT DISTINCT libraryID FROM assets WHERE libraryID IS NOT NULL
+				SELECT DISTINCT libraryID FROM assets WHERE userID = ? AND libraryID IS NOT NULL
 			)`,
 		strings.Join(placeholders, ","),
 	)
@@ -110,9 +116,17 @@ func (d *Database) needsLibraryIDBackfill(ctx context.Context, userID string) (b
 		return false, nil
 	}
 
+	hasLibraryAccess, err := d.getSyncState(ctx, userID, "hasLibraryAccess")
+	if err != nil {
+		return false, err
+	}
+	if hasLibraryAccess == nil || *hasLibraryAccess != "true" {
+		return false, nil
+	}
+
 	var hasLibraries bool
 	err = d.db.QueryRowContext(ctx,
-		"SELECT EXISTS(SELECT 1 FROM libraries)",
+		"SELECT EXISTS(SELECT 1 FROM libraries WHERE userID = ?)", userID,
 	).Scan(&hasLibraries)
 	if err != nil {
 		return false, err
@@ -143,9 +157,10 @@ func (d *Database) needsLibraryIDBackfill(ctx context.Context, userID string) (b
 	return hasUntaggedAssets, nil
 }
 
-func (d *Database) getHiddenLibraryIDs(ctx context.Context) ([]string, error) {
+func (d *Database) getHiddenLibraryIDs(ctx context.Context, userID string) ([]string, error) {
 	rows, err := d.db.QueryContext(ctx,
-		"SELECT libraryID FROM libraries WHERE isHidden = 1",
+		"SELECT libraryID FROM libraries WHERE userID = ? AND isHidden = 1",
+		userID,
 	)
 	if err != nil {
 		return nil, err
