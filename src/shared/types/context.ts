@@ -96,11 +96,6 @@ export type TUIMapContextValue = {
 	openLightboxAction: (assetID: string) => void;
 	closeLightboxAction: () => void;
 
-	visibleMarkerTotalCount: number | null;
-	isVisibleMarkerTotalCountStale: boolean;
-	setVisibleMarkerTotalCountAction: (totalCount: number | null) => void;
-	markVisibleMarkerTotalCountStaleAction: () => void;
-
 	mapMarkersVersion: number;
 };
 
