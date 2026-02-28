@@ -164,7 +164,8 @@ export function isHealthResponse(value: unknown): value is THealthResponse {
 		isFiniteNumber(value.syncedAssets) &&
 		isFiniteNumber(value.noGPSAssets) &&
 		isNullableString(value.lastSyncAt) &&
-		isString(value.immichURL)
+		isString(value.immichURL) &&
+		isFiniteNumber(value.syncVersion)
 	);
 }
 
