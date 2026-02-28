@@ -86,15 +86,15 @@ func (d *Database) deleteSyncState(ctx context.Context, userID, key string) {
 }
 
 const hiddenLibraryFilter = ` AND (libraryID IS NULL OR libraryID NOT IN (
-		SELECT libraryID FROM libraries WHERE isHidden = 1
+		SELECT libraryID FROM libraries WHERE isHidden = 1 AND userID = assets.userID
 	))`
 
 const hiddenLibraryFilterAliased = ` AND (a.libraryID IS NULL OR a.libraryID NOT IN (
-		SELECT libraryID FROM libraries WHERE isHidden = 1
+		SELECT libraryID FROM libraries WHERE isHidden = 1 AND userID = a.userID
 	))`
 
 const hiddenLibraryFilterAliasedAST = ` AND (ast.libraryID IS NULL OR ast.libraryID NOT IN (
-		SELECT libraryID FROM libraries WHERE isHidden = 1
+		SELECT libraryID FROM libraries WHERE isHidden = 1 AND userID = ast.userID
 	))`
 
 func (d *Database) countAssets(ctx context.Context, userID string) (int, error) {
@@ -578,6 +578,7 @@ func (d *Database) deleteUserSyncData(ctx context.Context, userID string) error 
 		"albums",
 		"frequentLocations",
 		"assets",
+		"libraries",
 		"syncState",
 	}
 	for _, table := range tables {

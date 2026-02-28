@@ -17,8 +17,8 @@ type SyncStore interface {
 	upsertAlbum(ctx context.Context, userID, albumID, albumName string, thumbnailAssetID *string, assetCount int, updatedAt string, startDate *string) error
 	replaceAlbumAssets(ctx context.Context, userID, albumID string, assetIDs []string) error
 	deleteAlbumsNotIn(ctx context.Context, userID string, albumIDs []string) error
-	upsertLibrary(ctx context.Context, libraryID, name string, assetCount int) error
-	deleteLibrariesNotIn(ctx context.Context, libraryIDs []string) error
+	upsertLibrary(ctx context.Context, userID, libraryID, name string, assetCount int) error
+	deleteLibrariesNotIn(ctx context.Context, userID string, libraryIDs []string) error
 	needsLibraryIDBackfill(ctx context.Context, userID string) (bool, error)
 }
 
@@ -34,6 +34,7 @@ type HandlerStore interface {
 	bulkUpdateAssetLocation(ctx context.Context, userID string, immichIDs []string, lat, lon float64) error
 	getFrequentLocations(ctx context.Context, userID string, limit int) ([]FrequentLocationRow, error)
 	getAssetPageInfo(ctx context.Context, userID, assetID string, albumID string, pageSize int) (*AssetPageInfo, error)
+	getAssetByID(ctx context.Context, userID, immichID string) (*AssetRow, error)
 	getAlbumsWithNoGPSCount(ctx context.Context, userID string) ([]AlbumRow, error)
 	getAlbumsWithGPSCount(ctx context.Context, userID string) ([]AlbumRow, error)
 }
@@ -63,5 +64,5 @@ type SyncImmichAPI interface {
 type HandlerLibraryStore interface {
 	getSyncState(ctx context.Context, userID, key string) (*string, error)
 	getLibraries(ctx context.Context, userID string) ([]LibraryRow, error)
-	updateLibraryVisibility(ctx context.Context, libraryID string, isHidden bool) error
+	updateLibraryVisibility(ctx context.Context, userID, libraryID string, isHidden bool) error
 }
