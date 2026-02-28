@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -145,6 +146,7 @@ func (h *AuthHandlers) handleRegister(w http.ResponseWriter, r *http.Request) {
 			Email: req.Email,
 		},
 		HasImmichAPIKey: false,
+		HasLibraries:    false,
 	})
 }
 
@@ -183,9 +185,14 @@ func (h *AuthHandlers) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hasLibAccess, err := h.db.getSyncState(r.Context(), user.ID, "hasLibraryAccess")
+	if err != nil {
+		log.Printf("Login: failed to get hasLibraryAccess for user %s: %v", user.ID, err)
+	}
 	writeJSON(w, http.StatusOK, TMeResponse{
 		User:            *user,
 		HasImmichAPIKey: user.ImmichAPIKey != nil,
+		HasLibraries:    hasLibAccess != nil && *hasLibAccess == "true",
 	})
 }
 
@@ -206,9 +213,14 @@ func (h *AuthHandlers) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
+	hasLibAccess, err := h.db.getSyncState(r.Context(), user.ID, "hasLibraryAccess")
+	if err != nil {
+		log.Printf("Me: failed to get hasLibraryAccess for user %s: %v", user.ID, err)
+	}
 	writeJSON(w, http.StatusOK, TMeResponse{
 		User:            *user,
 		HasImmichAPIKey: user.ImmichAPIKey != nil,
+		HasLibraries:    hasLibAccess != nil && *hasLibAccess == "true",
 	})
 }
 
@@ -245,6 +257,15 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 		keyToStore = req.ImmichAPIKey
 	}
 
+	if keyToStore != nil {
+		h.syncService.cancelUserSync(user.ID)
+		if err := h.db.deleteUserSyncData(r.Context(), user.ID); err != nil {
+			log.Printf("UpdateSettings: failed to clear sync data: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to clear previous sync data")
+			return
+		}
+	}
+
 	if err := h.db.updateImmichAPIKey(r.Context(), user.ID, keyToStore); err != nil {
 		log.Printf("UpdateSettings: failed to update API key: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -259,11 +280,26 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 	}
 
 	if keyToStore != nil {
+		immich := h.immichFactory.forUser(*keyToStore)
+		syncCtx, syncCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer syncCancel()
+		if err := h.syncService.syncLibraries(syncCtx, user.ID, immich); err != nil {
+			log.Printf("UpdateSettings: initial library sync failed: %v", err)
+		}
 		h.syncService.triggerUserSync(user.ID, *keyToStore)
+	} else {
+		if err := h.db.setSyncState(r.Context(), user.ID, "hasLibraryAccess", "false"); err != nil {
+			log.Printf("UpdateSettings: failed to reset hasLibraryAccess for user %s: %v", user.ID, err)
+		}
 	}
 
+	hasLibAccess, err := h.db.getSyncState(r.Context(), user.ID, "hasLibraryAccess")
+	if err != nil {
+		log.Printf("UpdateSettings: failed to get hasLibraryAccess for user %s: %v", user.ID, err)
+	}
 	writeJSON(w, http.StatusOK, TMeResponse{
 		User:            *updated,
 		HasImmichAPIKey: updated.ImmichAPIKey != nil,
+		HasLibraries:    hasLibAccess != nil && *hasLibAccess == "true",
 	})
 }
