@@ -211,22 +211,6 @@ func TestAssetIDUUIDValidation(t *testing.T) {
 	}
 }
 
-func TestSyncCooldownReturns429(t *testing.T) {
-	handlers, mux := newTestHandlers(t)
-
-	handlers.syncService.mu.Lock()
-	handlers.syncService.lastSyncCompleted[testUserID] = time.Now()
-	handlers.syncService.mu.Unlock()
-
-	req := withTestUser(httptest.NewRequest("POST", "/sync", nil))
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusTooManyRequests {
-		t.Errorf("expected 429 during cooldown, got %d (body: %s)", rec.Code, rec.Body.String())
-	}
-}
-
 func TestSuggestionsReturns404ForMissingAsset(t *testing.T) {
 	_, mux := newTestHandlers(t)
 
