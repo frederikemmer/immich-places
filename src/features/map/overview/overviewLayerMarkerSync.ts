@@ -130,7 +130,7 @@ function resolveMarkerGreyscale(args: TUseOverviewLayerReconcileArgs, assetID: s
 	if (isGreyscale) {
 		return true;
 	}
-	return args.pendingLocationsByAssetIDRef.current[assetID]?.isAlreadyApplied === true;
+	return Boolean(args.pendingLocationsByAssetIDRef.current[assetID]?.isAlreadyApplied);
 }
 
 /**
@@ -151,10 +151,10 @@ function syncSingleMarker(
 	const assetID = markerData.immichID;
 	const isMarkerVisible = !args.selectedIDs.has(assetID);
 	const renderedMarkerData = resolveMarkerData(args, assetID, markerData);
-	const effectiveGreyscale = resolveMarkerGreyscale(args, assetID, isGreyscale);
+	const hasEffectiveGreyscale = resolveMarkerGreyscale(args, assetID, isGreyscale);
 	clearOptimisticSavedLocation(args, assetID, markerData);
 
-	if (createMarkerIfMissing(args, map, renderedMarkerData, effectiveGreyscale, isMarkerVisible)) {
+	if (createMarkerIfMissing(args, map, renderedMarkerData, hasEffectiveGreyscale, isMarkerVisible)) {
 		return true;
 	}
 
@@ -164,7 +164,7 @@ function syncSingleMarker(
 	}
 
 	let hasChanges = false;
-	if (syncMarkerIcon(args, existingMarker, assetID, effectiveGreyscale)) {
+	if (syncMarkerIcon(args, existingMarker, assetID, hasEffectiveGreyscale)) {
 		hasChanges = true;
 	}
 	if (syncMarkerPosition(args, existingMarker, assetID, renderedMarkerData)) {
