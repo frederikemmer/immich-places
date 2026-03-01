@@ -141,7 +141,7 @@ func matchAssetsToTrack(assets []AssetRow, track []trackPoint, maxGapSeconds int
 			assetTime = time.Date(naive.Year(), naive.Month(), naive.Day(), naive.Hour(), naive.Minute(), naive.Second(), naive.Nanosecond(), trackTimezone).UTC()
 		}
 
-		if assetTime.Before(trackStart) || assetTime.After(trackEnd) {
+		if assetTime.Before(trackStart.Add(-maxGap)) || assetTime.After(trackEnd.Add(maxGap)) {
 			continue
 		}
 
