@@ -131,10 +131,10 @@ export function useResync({
 			const controller = new AbortController();
 			abortRef.current = controller;
 
-			let succeeded = false;
+			let didSucceed = false;
 			try {
 				await runSyncFlow(controller, shouldStartSync, triggerFn);
-				succeeded = true;
+				didSucceed = true;
 			} catch (error) {
 				if (isAbortError(error)) {
 					return false;
@@ -147,7 +147,7 @@ export function useResync({
 				isSyncingRef.current = false;
 				setIsSyncing(false);
 			}
-			return succeeded;
+			return didSucceed;
 		},
 		[runSyncFlow]
 	);
@@ -174,8 +174,8 @@ export function useResync({
 
 		const storedVersion = getStoredSyncVersion();
 		if (syncVersion > storedVersion) {
-			void executeSync(true).then(succeeded => {
-				if (succeeded) {
+			void executeSync(true).then(didSucceed => {
+				if (didSucceed) {
 					setStoredSyncVersion(syncVersion);
 				}
 			});

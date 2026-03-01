@@ -312,11 +312,11 @@ function attachClickHandlers(
 			return;
 		}
 		L.DomEvent.stopPropagation(event);
-		const clickGreyscale = resolveMarkerGreyscale(args, assetID, isGreyscale);
+		const isClickGreyscale = resolveMarkerGreyscale(args, assetID, isGreyscale);
 		handleMarkerClick(args, marker, {
 			assetID,
 			markerData: resolveMarkerData(args, assetID, latestMarkerData),
-			isGreyscale: clickGreyscale,
+			isGreyscale: isClickGreyscale,
 			map
 		});
 	});
