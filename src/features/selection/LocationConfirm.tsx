@@ -128,6 +128,10 @@ export function LocationConfirm(): ReactElement | null {
 			return;
 		}
 		const handler = (e: KeyboardEvent): void => {
+			const target = e.target as HTMLElement;
+			if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+				return;
+			}
 			const isUndoRedo = (e.metaKey || e.ctrlKey) && e.key === 'z';
 			if (!isUndoRedo) {
 				return;
