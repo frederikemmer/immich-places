@@ -99,13 +99,35 @@ export function GPXImportDialog({
 
 				<div className={'flex flex-col gap-3'}>
 					<div
+						role={'button'}
+						tabIndex={isLoading ? -1 : 0}
+						aria-disabled={isLoading}
 						onDragOver={e => {
 							e.preventDefault();
-							setIsDragOver(true);
+							if (!isLoading) {
+								setIsDragOver(true);
+							}
 						}}
 						onDragLeave={() => setIsDragOver(false)}
-						onDrop={handleDrop}
-						onClick={() => fileInputRef.current?.click()}
+						onDrop={e => {
+							if (isLoading) {
+								e.preventDefault();
+								setIsDragOver(false);
+								return;
+							}
+							handleDrop(e);
+						}}
+						onClick={() => {
+							if (!isLoading) {
+								fileInputRef.current?.click();
+							}
+						}}
+						onKeyDown={e => {
+							if ((e.key === 'Enter' || e.key === ' ') && !isLoading) {
+								e.preventDefault();
+								fileInputRef.current?.click();
+							}
+						}}
 						className={dropzoneClass}>
 						<svg
 							width={'24'}
