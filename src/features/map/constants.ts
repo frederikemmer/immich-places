@@ -15,6 +15,12 @@ export const TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{
 export const TILE_ATTRIBUTION =
 	'<a href="https://leafletjs.com">Leaflet</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | &copy; <a href="https://carto.com/">CARTO</a>';
 
+export const SATELLITE_TILE_URL =
+	'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+
+export const SATELLITE_TILE_ATTRIBUTION =
+	'<a href="https://leafletjs.com">Leaflet</a> | &copy; Esri, Maxar, Earthstar Geographics';
+
 /** Badge offset for selected map icon overlays. */
 export const MAP_ICON_BADGE_OFFSET_PX = -4;
 /** Horizontal inner padding used by map icon badges. */
