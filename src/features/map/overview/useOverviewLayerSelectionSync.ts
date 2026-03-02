@@ -44,8 +44,8 @@ export function useOverviewLayerSelectionSync({
 				continue;
 			}
 			const isNowSelected = nextSelectedIDs.has(assetID);
-			const greyscale = (marker as L.Marker & {markerGreyscale?: boolean}).markerGreyscale ?? false;
-			marker.setIcon(overviewIcon(assetID, isNowSelected, greyscale));
+			const isGreyscale = (marker as L.Marker & {markerGreyscale?: boolean}).markerGreyscale ?? false;
+			marker.setIcon(overviewIcon(assetID, isNowSelected, isGreyscale));
 		}
 		previousSelectedIDsRef.current = nextSelectedIDs;
 	}, [selectedAssets, overviewMarkersRef, previousSelectedIDsRef]);

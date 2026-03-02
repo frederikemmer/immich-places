@@ -7,7 +7,6 @@ import {
 	MAP_ICON_GRADIENT,
 	MAP_ICON_SELECTED_BORDER,
 	MAP_ICON_SELECTED_SHADOW,
-	MAP_ICON_SHADOW,
 	MAP_ICON_UNSELECTED_SHADOW
 } from '@/features/map/constants';
 import {thumbnailURL} from '@/utils/backendUrls';
