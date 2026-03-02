@@ -73,9 +73,8 @@ export function photoIcon(assetIDs: string[]): L.DivIcon {
 		        width:${size}px;
 		        height:${size}px;
 		        border-radius:50%;
-	        outline:${MAP_ICON_SELECTED_BORDER};
-	        outline-offset:0;
-	        box-shadow:${MAP_ICON_SHADOW};
+	        border:${MAP_ICON_SELECTED_BORDER};
+	        box-shadow:${MAP_ICON_SELECTED_SHADOW};
 	        background:${MAP_ICON_GRADIENT};
 	        overflow:hidden;
 	      ">${imageMarkup}</div>${badge}</div>`
