@@ -204,9 +204,12 @@ func (h *Handlers) handleGetMapMarkers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if limit < 1 || limit > maxMapMarkers {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be between 1 and %d", maxMapMarkers))
+	if limit < 1 {
+		writeError(w, http.StatusBadRequest, "limit must be at least 1")
 		return
+	}
+	if limit > maxMapMarkers {
+		limit = maxMapMarkers
 	}
 
 	var bounds *TViewportBounds
