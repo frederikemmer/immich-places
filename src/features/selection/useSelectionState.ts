@@ -64,7 +64,6 @@ export function useSelectionState(): TUseSelectionStateReturn {
 	const {
 		pushUndo,
 		popUndo,
-		peekUndo,
 		pushRedo,
 		popRedo,
 		canUndo,
@@ -74,12 +73,7 @@ export function useSelectionState(): TUseSelectionStateReturn {
 		endBatch: endLocationBatch
 	} = useLocationHistory();
 
-	const nextUndoSnapshot = peekUndo();
-	const hasNextUndoPendingData =
-		nextUndoSnapshot !== null &&
-		(nextUndoSnapshot.pendingLocation !== null ||
-			Object.keys(nextUndoSnapshot.pendingLocationsByAssetID).length > 0);
-	const canUndoLocation = canUndo && hasNextUndoPendingData;
+	const canUndoLocation = canUndo;
 
 	const updateAnchor = useCallback((nextSelected: TAssetRow[]): void => {
 		lastClickedID.current = resolveAnchorID(lastClickedID.current, nextSelected);

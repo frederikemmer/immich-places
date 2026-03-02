@@ -16,6 +16,11 @@ export const MAP_INITIAL_BOUNDS_SYNC_DELAY_MS = 500;
 export const MAP_BOUNDS_KEY_DECIMALS = 4;
 /** Maximum zoom supported by the tile provider. */
 export const MAP_TILE_MAX_ZOOM = 19;
+/** Maximum zoom supported by the Esri satellite tile provider. */
+export const MAP_SATELLITE_TILE_MAX_ZOOM = 18;
+
+/** Available tile layer modes. */
+export type TMapTileLayer = 'street' | 'satellite';
 
 /** Default fit bounds map padding. */
 export const MAP_FIT_PADDING: [number, number] = [30, 30];
