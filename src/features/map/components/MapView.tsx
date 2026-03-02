@@ -24,10 +24,19 @@ export function MapView(): ReactElement {
 	const mapModel = useMapViewModel();
 	const {mapMarkersError} = mapModel;
 
-	const {containerRef, mapInteractionError, handleLocateMe, handleZoomIn, handleZoomOut, handleDragOver, handleDrop} =
-		useMapViewController({
-			mapModel
-		});
+	const {
+		containerRef,
+		mapInteractionError,
+		activeTileLayer,
+		handleLocateMe,
+		handleZoomIn,
+		handleZoomOut,
+		handleToggleTileLayer,
+		handleDragOver,
+		handleDrop
+	} = useMapViewController({
+		mapModel
+	});
 
 	return (
 		<div className={'relative h-full w-full overflow-hidden rounded-xl border border-(--color-border)'}>
@@ -39,9 +48,11 @@ export function MapView(): ReactElement {
 			/>
 			<MapOverlays />
 			<MapControls
+				activeTileLayer={activeTileLayer}
 				onZoomInAction={handleZoomIn}
 				onZoomOutAction={handleZoomOut}
 				onLocateMeAction={handleLocateMe}
+				onToggleTileLayerAction={handleToggleTileLayer}
 			/>
 			{(mapMarkersError || mapInteractionError) && (
 				<div
