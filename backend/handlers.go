@@ -128,9 +128,9 @@ func (h *Handlers) handleGetAssets(w http.ResponseWriter, r *http.Request) {
 	withGPS := r.URL.Query().Get("gpsFilter") == "with-gps"
 	hiddenFilter := r.URL.Query().Get("hiddenFilter")
 	if hiddenFilter == "" {
-		hiddenFilter = "visible"
+		hiddenFilter = hiddenFilterVisible
 	}
-	if hiddenFilter != "visible" && hiddenFilter != "hidden" && hiddenFilter != "all" {
+	if hiddenFilter != hiddenFilterVisible && hiddenFilter != hiddenFilterHidden && hiddenFilter != hiddenFilterAll {
 		writeError(w, http.StatusBadRequest, "hiddenFilter must be one of: visible, hidden, all")
 		return
 	}

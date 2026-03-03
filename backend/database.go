@@ -16,6 +16,10 @@ import (
 const (
 	sqliteChunkSize = 500
 	maxMapMarkers   = 100000
+
+	hiddenFilterVisible = "visible"
+	hiddenFilterHidden  = "hidden"
+	hiddenFilterAll     = "all"
 )
 
 const assetColumns = `immichID, type, originalFileName, fileCreatedAt, latitude, longitude,
@@ -139,9 +143,9 @@ func buildAssetFilter(userID, albumID string, withGPS bool, hiddenFilter string)
 		f.fromClause += ` AND a.stackPrimaryAssetID IS NULL`
 		f.fromClause += hiddenLibraryFilterAliased
 		switch hiddenFilter {
-		case "hidden":
+		case hiddenFilterHidden:
 			f.fromClause += ` AND a.isHidden = 1`
-		case "all":
+		case hiddenFilterAll:
 			// no filter
 		default:
 			f.fromClause += ` AND a.isHidden = 0`
@@ -157,9 +161,9 @@ func buildAssetFilter(userID, albumID string, withGPS bool, hiddenFilter string)
 		f.fromClause += ` AND stackPrimaryAssetID IS NULL`
 		f.fromClause += hiddenLibraryFilter
 		switch hiddenFilter {
-		case "hidden":
+		case hiddenFilterHidden:
 			f.fromClause += ` AND isHidden = 1`
-		case "all":
+		case hiddenFilterAll:
 			// no filter
 		default:
 			f.fromClause += ` AND isHidden = 0`
