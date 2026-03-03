@@ -71,7 +71,7 @@ type SyncStatusResponse struct {
 }
 
 type HiddenUpdateRequest struct {
-	IsHidden *bool `json:"isHidden" validate:"required"`
+	IsHidden *bool `json:"isHidden"`
 }
 
 type LocationUpdateRequest struct {
