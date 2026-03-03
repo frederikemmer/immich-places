@@ -11,7 +11,7 @@ import type {TGPXPreviewResponse} from '@/features/gpxImport/gpxImportTypes';
 import type {TAlbumRow} from '@/shared/types/album';
 import type {TAssetRow} from '@/shared/types/asset';
 import type {THealthResponse} from '@/shared/types/health';
-import type {TGPSFilter} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 import type {CSSProperties, ReactElement} from 'react';
 
@@ -28,6 +28,7 @@ type TPhotoListProps = {
 	};
 	view: {
 		gpsFilter: TGPSFilter;
+		hiddenFilter: THiddenFilter;
 		pageSize: number;
 		gridColumns: number;
 		visibleMarkerLimit: number;
@@ -37,6 +38,7 @@ type TPhotoListProps = {
 		selectedAlbum: TAlbumRow | null;
 		missingCount: number | null;
 		onGPSFilterAction: (filter: TGPSFilter) => void;
+		onHiddenFilterAction: (filter: THiddenFilter) => void;
 		onPageSizeAction: (size: number) => void;
 		onGridColumnsAction: (cols: number) => void;
 		onVisibleMarkerLimitAction: (limit: number) => void;
@@ -93,6 +95,7 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 	const {health, isSyncing, syncError} = backend;
 	const {
 		gpsFilter,
+		hiddenFilter,
 		pageSize,
 		gridColumns,
 		visibleMarkerLimit,
@@ -101,6 +104,7 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 		selectedAlbumID,
 		selectedAlbum,
 		onGPSFilterAction,
+		onHiddenFilterAction,
 		onPageSizeAction,
 		onGridColumnsAction,
 		onVisibleMarkerLimitAction,
@@ -153,6 +157,8 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 			<FilterBar
 				gpsFilter={gpsFilter}
 				onGPSFilterAction={onGPSFilterAction}
+				hiddenFilter={hiddenFilter}
+				onHiddenFilterAction={onHiddenFilterAction}
 				missingCount={effectiveMissingCount}
 				pageSize={pageSize}
 				onPageSizeAction={onPageSizeAction}

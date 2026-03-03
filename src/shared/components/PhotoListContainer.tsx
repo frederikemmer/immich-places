@@ -26,6 +26,8 @@ export function PhotoListContainer(): ReactElement {
 	const {
 		gpsFilter,
 		setGPSFilterAction,
+		hiddenFilter,
+		setHiddenFilterAction,
 		pageSize,
 		setPageSizeAction,
 		gridColumns,
@@ -183,6 +185,7 @@ export function PhotoListContainer(): ReactElement {
 			}}
 			view={{
 				gpsFilter,
+				hiddenFilter,
 				pageSize,
 				gridColumns,
 				visibleMarkerLimit,
@@ -192,6 +195,7 @@ export function PhotoListContainer(): ReactElement {
 				selectedAlbum,
 				missingCount,
 				onGPSFilterAction: setGPSFilterAction,
+				onHiddenFilterAction: setHiddenFilterAction,
 				onPageSizeAction: setPageSizeAction,
 				onGridColumnsAction: setGridColumnsAction,
 				onVisibleMarkerLimitAction: setVisibleMarkerLimitAction,
