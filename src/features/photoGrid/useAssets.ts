@@ -7,7 +7,7 @@ import {normalizePositiveInteger} from '@/utils/math';
 import {DEFAULT_PAGE_SIZE} from '@/utils/view';
 
 import type {TAssetRow} from '@/shared/types/asset';
-import type {TGPSFilter} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {MutableRefObject} from 'react';
 
 /**
@@ -39,6 +39,7 @@ type TUseAssetsReturn = {
 export function useAssets(
 	gpsFilter: TGPSFilter,
 	pageSize: number,
+	hiddenFilter: THiddenFilter,
 	albumID?: string | null,
 	focusPageRef?: MutableRefObject<number | null>
 ): TUseAssetsReturn {
@@ -67,6 +68,7 @@ export function useAssets(
 					normalizedPage,
 					normalizedPageSizeValue,
 					gpsFilter,
+					hiddenFilter,
 					albumID ?? undefined,
 					{
 						signal: controller.signal
@@ -92,20 +94,23 @@ export function useAssets(
 				}
 			}
 		},
-		[albumID, gpsFilter, pageSize]
+		[albumID, gpsFilter, hiddenFilter, pageSize]
 	);
 
 	const prevAlbumID = useRef(albumID);
 	const prevGPSFilter = useRef(gpsFilter);
+	const prevHiddenFilter = useRef(hiddenFilter);
 	const prevPageSize = useRef(pageSize);
 	useEffect(() => {
 		if (
 			prevAlbumID.current !== albumID ||
 			prevGPSFilter.current !== gpsFilter ||
+			prevHiddenFilter.current !== hiddenFilter ||
 			prevPageSize.current !== pageSize
 		) {
 			prevAlbumID.current = albumID;
 			prevGPSFilter.current = gpsFilter;
+			prevHiddenFilter.current = hiddenFilter;
 			prevPageSize.current = pageSize;
 			setAssets([]);
 			setTotal(0);
@@ -116,7 +121,7 @@ export function useAssets(
 			}
 			void loadPageAction(page);
 		}
-	}, [albumID, gpsFilter, pageSize, loadPageAction, focusPageRef]);
+	}, [albumID, gpsFilter, hiddenFilter, pageSize, loadPageAction, focusPageRef]);
 
 	useEffect(() => {
 		return () => {

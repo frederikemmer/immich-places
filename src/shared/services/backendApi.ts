@@ -27,7 +27,7 @@ import type {TAssetPageInfo, TPaginatedAssets} from '@/shared/types/asset';
 import type {TAuthErrorCode} from '@/shared/types/auth';
 import type {THealthResponse} from '@/shared/types/health';
 import type {TLibraryRow} from '@/shared/types/library';
-import type {TGPSFilter, TMapMarker} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter, TMapMarker} from '@/shared/types/map';
 import type {TLocationCluster, TSuggestionsResponse} from '@/shared/types/suggestion';
 
 const BASE = getBackendBaseURL();
@@ -109,13 +109,15 @@ export async function fetchAssets(
 	page: number,
 	pageSize: number,
 	gpsFilter: TGPSFilter,
+	hiddenFilter: THiddenFilter,
 	albumID?: string,
 	opts: TRequestOptions = {}
 ): Promise<TPaginatedAssets> {
 	const params = buildSearchParams({
 		page: String(normalizeAssetPage(page)),
 		pageSize: String(normalizePageSize(pageSize)),
-		gpsFilter
+		gpsFilter,
+		hiddenFilter
 	});
 	if (albumID) {
 		params.set('albumID', albumID);
@@ -419,4 +421,19 @@ export async function gpxPreview(
 		throw new Error(msg ?? `GPX preview failed: ${response.status}`);
 	}
 	return parseJSON(response, isGPXPreviewResponse, 'Invalid GPX preview response payload');
+}
+
+export async function toggleAssetHidden(assetID: string, isHidden: boolean, opts: TRequestOptions = {}): Promise<void> {
+	const response = await backendFetch(
+		`${BASE}/assets/${encodeURIComponent(assetID)}/hidden`,
+		{
+			method: 'PUT',
+			headers: {'Content-Type': 'application/json'}, //eslint-disable-line
+			body: JSON.stringify({isHidden})
+		},
+		opts
+	);
+	if (!response.ok) {
+		throw new Error(`Failed to update hidden state: ${response.status}`);
+	}
 }
