@@ -10,9 +10,11 @@ import {
 	GPS_FILTER_DEFAULT,
 	GPS_FILTER_NO_GPS,
 	GPS_FILTER_WITH_GPS,
+	HIDDEN_FILTER_DEFAULT,
 	URL_PARAM_ALBUM_ID,
 	URL_PARAM_GPS_FILTER,
 	URL_PARAM_GRID_COLUMNS,
+	URL_PARAM_HIDDEN_FILTER,
 	URL_PARAM_MARKER_LIMIT,
 	URL_PARAM_PAGE_SIZE,
 	URL_PARAM_VIEW_MODE,
@@ -20,7 +22,7 @@ import {
 	clampVisibleMarkerLimit
 } from '@/utils/view';
 
-import type {TGPSFilter} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 
 /**
@@ -28,6 +30,7 @@ import type {TViewMode} from '@/shared/types/view';
  */
 type TURLSyncState = {
 	gpsFilter: TGPSFilter;
+	hiddenFilter: THiddenFilter;
 	viewMode: TViewMode;
 	selectedAlbumID: string | null;
 	pageSize: number;
@@ -41,6 +44,8 @@ type TURLSyncState = {
 type TURLState = {
 	gpsFilter: TGPSFilter;
 	setGPSFilterRawAction: (filter: TGPSFilter) => void;
+	hiddenFilter: THiddenFilter;
+	setHiddenFilterRawAction: (filter: THiddenFilter) => void;
 	pageSize: number;
 	setPageSizeAction: (size: number) => void;
 	gridColumns: number;
@@ -164,6 +169,13 @@ function parseGPSFilter(value: string | null): TGPSFilter {
 	return GPS_FILTER_DEFAULT;
 }
 
+function parseHiddenFilter(value: string | null): THiddenFilter {
+	if (value === 'all' || value === 'hidden' || value === 'visible') {
+		return value;
+	}
+	return HIDDEN_FILTER_DEFAULT;
+}
+
 /**
  * Serializes active filter state into query string format.
  *
@@ -176,6 +188,9 @@ export function buildURLFromState(state: TURLSyncState): string {
 	const params = new URLSearchParams();
 	if (state.gpsFilter !== GPS_FILTER_DEFAULT) {
 		params.set(URL_PARAM_GPS_FILTER, state.gpsFilter);
+	}
+	if (state.hiddenFilter !== HIDDEN_FILTER_DEFAULT) {
+		params.set(URL_PARAM_HIDDEN_FILTER, state.hiddenFilter);
 	}
 	if (state.viewMode !== VIEW_MODE_DEFAULT) {
 		params.set(URL_PARAM_VIEW_MODE, state.viewMode);
@@ -214,6 +229,7 @@ export function buildURLFromState(state: TURLSyncState): string {
 function applyURLToState(
 	search: string,
 	setGPSFilterRawAction: (filter: TGPSFilter) => void,
+	setHiddenFilterRawAction: (filter: THiddenFilter) => void,
 	setViewModeAction: (mode: TViewMode) => void,
 	setSelectedAlbumIDAction: (albumID: string | null) => void,
 	setPageSizeAction: (size: number) => void,
@@ -227,6 +243,7 @@ function applyURLToState(
 	const params = new URLSearchParams(search);
 	const urlGPS = params.get(URL_PARAM_GPS_FILTER);
 	setGPSFilterRawAction(parseGPSFilter(urlGPS));
+	setHiddenFilterRawAction(parseHiddenFilter(params.get(URL_PARAM_HIDDEN_FILTER)));
 
 	const urlView = params.get(URL_PARAM_VIEW_MODE);
 	if (urlView === 'timeline' || urlView === 'album') {
@@ -258,6 +275,7 @@ function applyURLToState(
 export function useURLState(): TURLState {
 	const urlSync = useMemo(() => createBrowserURLSync(), []);
 	const [gpsFilter, setGPSFilterRawAction] = useState<TGPSFilter>(GPS_FILTER_DEFAULT);
+	const [hiddenFilter, setHiddenFilterRawAction] = useState<THiddenFilter>(HIDDEN_FILTER_DEFAULT);
 	const [pageSize, setPageSizeAction] = useState(DEFAULT_PAGE_SIZE);
 	const [gridColumns, setGridColumnsAction] = useState(DEFAULT_GRID_COLUMNS);
 	const [visibleMarkerLimit, setVisibleMarkerLimitAction] = useState(DEFAULT_VISIBLE_MARKER_LIMIT);
@@ -270,6 +288,7 @@ export function useURLState(): TURLState {
 				state !== undefined && Object.prototype.hasOwnProperty.call(state, 'selectedAlbumID');
 			const nextState = {
 				gpsFilter: state?.gpsFilter ?? gpsFilter,
+				hiddenFilter: state?.hiddenFilter ?? hiddenFilter,
 				viewMode: state?.viewMode ?? viewMode,
 				selectedAlbumID: hasSelectedAlbumID ? (state.selectedAlbumID ?? null) : selectedAlbumID,
 				pageSize: state?.pageSize ?? pageSize,
@@ -278,7 +297,7 @@ export function useURLState(): TURLState {
 			};
 			return buildURLFromState(nextState);
 		},
-		[gpsFilter, viewMode, selectedAlbumID, pageSize, gridColumns, visibleMarkerLimit]
+		[gpsFilter, hiddenFilter, viewMode, selectedAlbumID, pageSize, gridColumns, visibleMarkerLimit]
 	);
 
 	const syncURLAction = useCallback(
@@ -303,6 +322,7 @@ export function useURLState(): TURLState {
 		applyURLToState(
 			readSearch(),
 			setGPSFilterRawAction,
+			setHiddenFilterRawAction,
 			setViewModeAction,
 			setSelectedAlbumIDAction,
 			setPageSizeAction,
@@ -314,6 +334,7 @@ export function useURLState(): TURLState {
 			applyURLToState(
 				readSearch(),
 				setGPSFilterRawAction,
+				setHiddenFilterRawAction,
 				setViewModeAction,
 				setSelectedAlbumIDAction,
 				setPageSizeAction,
@@ -331,6 +352,8 @@ export function useURLState(): TURLState {
 	return {
 		gpsFilter,
 		setGPSFilterRawAction,
+		hiddenFilter,
+		setHiddenFilterRawAction,
 		pageSize,
 		setPageSizeAction,
 		gridColumns,

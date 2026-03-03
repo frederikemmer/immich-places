@@ -1,6 +1,6 @@
 'use client';
 
-import type {TGPSFilter} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 
 export const GPS_LABEL: Record<TGPSFilter, string> = {
@@ -10,6 +10,8 @@ export const GPS_LABEL: Record<TGPSFilter, string> = {
 export const gpsOptions: readonly TGPSFilter[] = ['no-gps', 'with-gps'];
 export const VIEW_MODE_LABEL: Record<TViewMode, string> = {timeline: 'Timeline', album: 'Albums'};
 export const viewModeOptions: readonly TViewMode[] = ['timeline', 'album'];
+export const HIDDEN_LABEL: Record<THiddenFilter, string> = {visible: 'Visible', hidden: 'Hidden', all: 'All'};
+export const hiddenOptions: readonly THiddenFilter[] = ['visible', 'hidden', 'all'];
 
 export const toolButtonClass =
 	'flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border-0 bg-(--color-bg) text-(--color-text-secondary) transition-all duration-150 hover:text-(--color-text)';

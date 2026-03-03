@@ -7,7 +7,7 @@ import {useInitialCatalogLoad} from '@/features/albums/useInitialCatalogLoad';
 import {useAssets} from '@/features/photoGrid/useAssets';
 
 import type {TCatalogContextValue} from '@/shared/types/context';
-import type {TGPSFilter} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 
 /**
@@ -15,6 +15,7 @@ import type {TViewMode} from '@/shared/types/view';
  */
 type TUseCatalogDomainArgs = {
 	gpsFilter: TGPSFilter;
+	hiddenFilter: THiddenFilter;
 	pageSize: number;
 	viewMode: TViewMode;
 	selectedAlbumID: string | null;
@@ -51,6 +52,7 @@ type TUseCatalogDomainResult = {
  */
 export function useCatalogDomain({
 	gpsFilter,
+	hiddenFilter,
 	pageSize,
 	viewMode,
 	selectedAlbumID,
@@ -68,7 +70,7 @@ export function useCatalogDomain({
 		removeAsset,
 		loadPageAction,
 		clear: clearAssets
-	} = useAssets(gpsFilter, pageSize, albumFilter, focusPageRef);
+	} = useAssets(gpsFilter, hiddenFilter, pageSize, albumFilter, focusPageRef);
 	const {
 		albums,
 		isLoading: isLoadingAlbums,

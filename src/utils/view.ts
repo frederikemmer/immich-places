@@ -1,6 +1,6 @@
 import {normalizePositiveInteger} from '@/utils/math';
 
-import type {TGPSFilter} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 
 /**
@@ -14,6 +14,11 @@ export const GPS_FILTER_WITH_GPS: TGPSFilter = 'with-gps';
 export const GPS_FILTER_DEFAULT: TGPSFilter = GPS_FILTER_WITH_GPS;
 /** Alias for no-GPS filter. */
 export const GPS_FILTER_NO_GPS: TGPSFilter = 'no-gps';
+/** Default hidden filter value. */
+export const HIDDEN_FILTER_DEFAULT: THiddenFilter = 'visible';
+/** Query key for hidden filter. */
+export const URL_PARAM_HIDDEN_FILTER = 'hidden';
+
 /** Default number of items per page. */
 export const DEFAULT_PAGE_SIZE = 90;
 /** Default grid column count. */
@@ -28,7 +33,7 @@ export const VISIBLE_MARKER_LIMIT_MAX = 100000;
 export const VISIBLE_MARKER_LIMIT_INCREMENT = 1000;
 
 /** Allowed page size options available in pagination controls. */
-export const PAGE_SIZE_OPTIONS = [30, 60, 90, 120] as const;
+export const PAGE_SIZE_OPTIONS = [60, 90, 120] as const;
 /** Allowed grid column options available in view controls. */
 export const GRID_COLUMN_OPTIONS = [1, 2, 3, 4] as const;
 

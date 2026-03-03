@@ -40,6 +40,7 @@ func newTestHandlers(t *testing.T) (*Handlers, *http.ServeMux) {
 	mux.HandleFunc("GET /albums", handlers.handleGetAlbums)
 	mux.HandleFunc("GET /map-markers", handlers.handleGetMapMarkers)
 	mux.HandleFunc("PUT /assets/{assetID}/location", handlers.handleUpdateLocation)
+	mux.HandleFunc("PUT /assets/{assetID}/hidden", handlers.handleUpdateHidden)
 	mux.HandleFunc("GET /assets/{assetID}/page-info", handlers.handleGetAssetPageInfo)
 	mux.HandleFunc("GET /sync/status", handlers.handleSyncStatus)
 	mux.HandleFunc("GET /assets/{assetID}/thumbnail", handlers.handleGetThumbnail)
@@ -346,6 +347,7 @@ func newTestHandlersWithMockImmich(t *testing.T, immichHandler http.HandlerFunc)
 	mux.HandleFunc("GET /albums", handlers.handleGetAlbums)
 	mux.HandleFunc("GET /map-markers", handlers.handleGetMapMarkers)
 	mux.HandleFunc("PUT /assets/{assetID}/location", handlers.handleUpdateLocation)
+	mux.HandleFunc("PUT /assets/{assetID}/hidden", handlers.handleUpdateHidden)
 	mux.HandleFunc("GET /assets/{assetID}/page-info", handlers.handleGetAssetPageInfo)
 	mux.HandleFunc("GET /sync/status", handlers.handleSyncStatus)
 	mux.HandleFunc("GET /assets/{assetID}/thumbnail", handlers.handleGetThumbnail)
@@ -803,6 +805,102 @@ func TestHandleGetSuggestionsNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 for nonexistent asset, got %d", rec.Code)
+	}
+}
+
+func TestHiddenUpdateValidation(t *testing.T) {
+	_, mux := newTestHandlers(t)
+
+	tests := []struct {
+		name   string
+		body   string
+		status int
+	}{
+		{"empty body returns 400", "", 400},
+		{"invalid JSON returns 400", "{bad}", 400},
+		{"unknown fields returns 400", `{"isHidden":true,"extra":true}`, 400},
+		{"missing isHidden returns 400", `{}`, 400},
+		{"null isHidden returns 400", `{"isHidden":null}`, 400},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := withTestUser(httptest.NewRequest("PUT", "/assets/00000000-0000-0000-0000-000000000001/hidden", strings.NewReader(tt.body)))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tt.status {
+				t.Errorf("expected %d, got %d (body: %s)", tt.status, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestHandleUpdateHiddenSuccess(t *testing.T) {
+	handlers, mux := newTestHandlers(t)
+	d := handlers.db.(*Database)
+	seedAsset(t, d, "00000000-0000-0000-0000-000000000001", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z")
+
+	req := withTestUser(httptest.NewRequest("PUT", "/assets/00000000-0000-0000-0000-000000000001/hidden",
+		strings.NewReader(`{"isHidden":true}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	ctx := context.Background()
+	hidden, err := d.countFilteredAssets(ctx, testUserID, "", true, "hidden")
+	if err != nil {
+		t.Fatalf("countFilteredAssets: %v", err)
+	}
+	if hidden != 1 {
+		t.Errorf("expected 1 hidden asset, got %d", hidden)
+	}
+}
+
+func TestHandleUpdateHiddenNotFound(t *testing.T) {
+	_, mux := newTestHandlers(t)
+
+	req := withTestUser(httptest.NewRequest("PUT", "/assets/00000000-0000-0000-0000-000000000099/hidden",
+		strings.NewReader(`{"isHidden":true}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHiddenFilterQueryParamValidation(t *testing.T) {
+	_, mux := newTestHandlers(t)
+
+	tests := []struct {
+		name   string
+		query  string
+		status int
+	}{
+		{"default returns 200", "/assets?page=1&pageSize=10", 200},
+		{"visible returns 200", "/assets?page=1&pageSize=10&hiddenFilter=visible", 200},
+		{"hidden returns 200", "/assets?page=1&pageSize=10&hiddenFilter=hidden", 200},
+		{"all returns 200", "/assets?page=1&pageSize=10&hiddenFilter=all", 200},
+		{"invalid returns 400", "/assets?page=1&pageSize=10&hiddenFilter=garbage", 400},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := withTestUser(httptest.NewRequest("GET", tt.query, nil))
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tt.status {
+				t.Errorf("expected %d, got %d (body: %s)", tt.status, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 
