@@ -126,6 +126,10 @@ func (h *Handlers) handleGetAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	albumID := r.URL.Query().Get("albumID")
 	withGPS := r.URL.Query().Get("gpsFilter") == "with-gps"
+	hiddenFilter := r.URL.Query().Get("hiddenFilter")
+	if hiddenFilter == "" {
+		hiddenFilter = "visible"
+	}
 
 	if page < 1 {
 		writeError(w, http.StatusBadRequest, "page must be >= 1")
@@ -136,13 +140,13 @@ func (h *Handlers) handleGetAssets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assets, err := h.db.getFilteredAssets(ctx, user.ID, albumID, withGPS, page, pageSize)
+	assets, err := h.db.getFilteredAssets(ctx, user.ID, albumID, withGPS, hiddenFilter, page, pageSize)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to query assets")
 		return
 	}
 
-	total, err := h.db.countFilteredAssets(ctx, user.ID, albumID, withGPS)
+	total, err := h.db.countFilteredAssets(ctx, user.ID, albumID, withGPS, hiddenFilter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to count assets")
 		return
@@ -358,6 +362,40 @@ func (h *Handlers) handleUpdateLocation(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handlers) handleUpdateHidden(w http.ResponseWriter, r *http.Request) {
+	assetID, err := parseAssetID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	user := getUserFromContext(r)
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+
+	var req HiddenUpdateRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.IsHidden == nil {
+		writeError(w, http.StatusBadRequest, "isHidden is required")
+		return
+	}
+
+	if err := h.db.updateAssetHidden(r.Context(), user.ID, assetID, *req.IsHidden); err != nil {
+		writeError(w, http.StatusNotFound, "asset not found")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handlers) resolveAndUpdateLocation(ctx context.Context, immich HandlerImmichAPI, userID, assetID string, lat, lon float64) error {
