@@ -148,6 +148,38 @@ func TestHiddenFilterDoesNotAffectMapMarkers(t *testing.T) {
 	}
 }
 
+func TestIsHiddenSurvivesUpsert(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	seedAsset(t, db, "a1", ptr(48.85), ptr(2.35), "2024-01-01T12:00:00Z")
+
+	if err := db.updateAssetHidden(ctx, testUserID, "a1", true); err != nil {
+		t.Fatalf("updateAssetHidden: %v", err)
+	}
+
+	hidden, _ := db.countFilteredAssets(ctx, testUserID, "", true, "hidden")
+	if hidden != 1 {
+		t.Fatalf("expected 1 hidden before upsert, got %d", hidden)
+	}
+
+	if err := db.upsertAssets(ctx, testUserID, []AssetRow{{
+		ImmichID:         "a1",
+		Type:             "IMAGE",
+		OriginalFileName: "photo.jpg",
+		FileCreatedAt:    "2024-01-01T12:00:00Z",
+		Latitude:         ptr(48.85),
+		Longitude:        ptr(2.35),
+	}}); err != nil {
+		t.Fatalf("upsertAssets: %v", err)
+	}
+
+	hidden, _ = db.countFilteredAssets(ctx, testUserID, "", true, "hidden")
+	if hidden != 1 {
+		t.Errorf("expected isHidden to survive upsert, got %d hidden", hidden)
+	}
+}
+
 func TestGetMapMarkersNoBounds(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
