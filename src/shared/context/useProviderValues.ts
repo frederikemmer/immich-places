@@ -52,6 +52,8 @@ export function useViewValue(input: TViewContextValue): TViewContextValue {
 		() => ({
 			gpsFilter: input.gpsFilter,
 			setGPSFilterAction: input.setGPSFilterAction,
+			hiddenFilter: input.hiddenFilter,
+			setHiddenFilterAction: input.setHiddenFilterAction,
 			pageSize: input.pageSize,
 			setPageSizeAction: input.setPageSizeAction,
 			gridColumns: input.gridColumns,
@@ -66,6 +68,8 @@ export function useViewValue(input: TViewContextValue): TViewContextValue {
 		[
 			input.gpsFilter,
 			input.setGPSFilterAction,
+			input.hiddenFilter,
+			input.setHiddenFilterAction,
 			input.pageSize,
 			input.setPageSizeAction,
 			input.gridColumns,

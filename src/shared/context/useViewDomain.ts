@@ -6,7 +6,7 @@ import {useURLState} from '@/features/filterBar/useURLState';
 import {clampVisibleMarkerLimit} from '@/utils/view';
 
 import type {TViewContextValue} from '@/shared/types/context';
-import type {TGPSFilter} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 
 /**
@@ -14,6 +14,7 @@ import type {TViewMode} from '@/shared/types/view';
  */
 type TViewDomain = {
 	gpsFilter: TGPSFilter;
+	hiddenFilter: THiddenFilter;
 	pageSize: number;
 	setPageSizeAction: (size: number) => void;
 	gridColumns: number;
@@ -24,8 +25,10 @@ type TViewDomain = {
 	setViewModeAction: (mode: TViewMode) => void;
 	selectedAlbumID: string | null;
 	setGPSFilterRawAction: (filter: TGPSFilter) => void;
+	setHiddenFilterRawAction: (filter: THiddenFilter) => void;
 	setSelectedAlbumIDAction: (albumID: string | null) => void;
 	setGPSFilterAction: TViewContextValue['setGPSFilterAction'];
+	setHiddenFilterAction: TViewContextValue['setHiddenFilterAction'];
 	selectAlbumAction: TViewContextValue['selectAlbumAction'];
 };
 
@@ -45,6 +48,8 @@ export function useViewDomain(): TViewDomain {
 	const {
 		gpsFilter,
 		setGPSFilterRawAction,
+		hiddenFilter,
+		setHiddenFilterRawAction,
 		pageSize,
 		setPageSizeAction,
 		gridColumns,
@@ -69,11 +74,17 @@ export function useViewDomain(): TViewDomain {
 		[gpsFilter, setGPSFilterRawAction, syncURLAction]
 	);
 
-	/**
-	 * Update page size only when changed and sync it to URL.
-	 *
-	 * @param size - New page size value.
-	 */
+	const setHiddenFilter = useCallback(
+		(filter: THiddenFilter) => {
+			if (filter === hiddenFilter) {
+				return;
+			}
+			setHiddenFilterRawAction(filter);
+			syncURLAction({hiddenFilter: filter});
+		},
+		[hiddenFilter, setHiddenFilterRawAction, syncURLAction]
+	);
+
 	const handleSetPageSize = useCallback(
 		(size: number) => {
 			if (size === pageSize) {
@@ -149,7 +160,9 @@ export function useViewDomain(): TViewDomain {
 
 	return {
 		gpsFilter,
+		hiddenFilter,
 		setGPSFilterRawAction,
+		setHiddenFilterRawAction,
 		pageSize,
 		setPageSizeAction: handleSetPageSize,
 		gridColumns,
@@ -161,6 +174,7 @@ export function useViewDomain(): TViewDomain {
 		selectedAlbumID,
 		setSelectedAlbumIDAction,
 		setGPSFilterAction: setGPSFilter,
+		setHiddenFilterAction: setHiddenFilter,
 		selectAlbumAction
 	};
 }

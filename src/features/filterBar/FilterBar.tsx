@@ -7,6 +7,7 @@ import {filterButtonClass, optionButtonClass, toolButtonClass} from '@/features/
 import {FilterIcon} from '@/features/filterBar/FilterIcon';
 import {GPSFilterGroup} from '@/features/filterBar/GPSFilterGroup';
 import {HeaderTitle} from '@/features/filterBar/HeaderTitle';
+import {HiddenFilterGroup} from '@/features/filterBar/HiddenFilterGroup';
 import {NumericOptionGroup} from '@/features/filterBar/NumericOptionGroup';
 import {ViewModeGroup} from '@/features/filterBar/ViewModeGroup';
 import {cn} from '@/utils/cn';
@@ -18,7 +19,7 @@ import {
 	resolveActiveVisibleMarkerLimit
 } from '@/utils/view';
 
-import type {TGPSFilter} from '@/shared/types/map';
+import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 import type {ReactElement} from 'react';
 
@@ -28,6 +29,8 @@ import type {ReactElement} from 'react';
 type TFilterBarProps = {
 	gpsFilter: TGPSFilter;
 	onGPSFilterAction: (filter: TGPSFilter) => void;
+	hiddenFilter: THiddenFilter;
+	onHiddenFilterAction: (filter: THiddenFilter) => void;
 	missingCount: number | null;
 	pageSize: number;
 	onPageSizeAction: (size: number) => void;
@@ -75,6 +78,8 @@ type TFilterBarProps = {
 export function FilterBar({
 	gpsFilter,
 	onGPSFilterAction,
+	hiddenFilter,
+	onHiddenFilterAction,
 	missingCount,
 	pageSize,
 	onPageSizeAction,
@@ -233,6 +238,10 @@ export function FilterBar({
 							value={gridColumns}
 							options={GRID_COLUMN_OPTIONS}
 							onChangeAction={onGridColumnsAction}
+						/>
+						<HiddenFilterGroup
+							hiddenFilter={hiddenFilter}
+							onHiddenFilterAction={onHiddenFilterAction}
 						/>
 					</div>
 					{visibleMarkerLimitOptions.length > 0 && (

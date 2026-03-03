@@ -40,7 +40,8 @@ export function GPXImportPanel({preview, error, onReset}: TGPXImportPanelProps):
 				state: null,
 				country: null,
 				dateTimeOriginal: null,
-				syncedAt: ''
+				syncedAt: '',
+				isHidden: false
 			})),
 		[preview]
 	);
