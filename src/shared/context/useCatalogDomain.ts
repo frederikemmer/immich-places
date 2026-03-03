@@ -70,7 +70,7 @@ export function useCatalogDomain({
 		removeAsset,
 		loadPageAction,
 		clear: clearAssets
-	} = useAssets(gpsFilter, pageSize, hiddenFilter, albumFilter, focusPageRef);
+	} = useAssets(gpsFilter, hiddenFilter, pageSize, albumFilter, focusPageRef);
 	const {
 		albums,
 		isLoading: isLoadingAlbums,

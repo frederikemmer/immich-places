@@ -74,11 +74,6 @@ export function useViewDomain(): TViewDomain {
 		[gpsFilter, setGPSFilterRawAction, syncURLAction]
 	);
 
-	/**
-	 * Update page size only when changed and sync it to URL.
-	 *
-	 * @param size - New page size value.
-	 */
 	const setHiddenFilter = useCallback(
 		(filter: THiddenFilter) => {
 			if (filter === hiddenFilter) {

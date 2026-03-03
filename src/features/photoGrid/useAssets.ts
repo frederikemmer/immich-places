@@ -38,8 +38,8 @@ type TUseAssetsReturn = {
  */
 export function useAssets(
 	gpsFilter: TGPSFilter,
-	pageSize: number,
 	hiddenFilter: THiddenFilter,
+	pageSize: number,
 	albumID?: string | null,
 	focusPageRef?: MutableRefObject<number | null>
 ): TUseAssetsReturn {
