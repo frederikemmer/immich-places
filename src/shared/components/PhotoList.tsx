@@ -5,6 +5,7 @@ import {FilterBar} from '@/features/filterBar/FilterBar';
 import {GPXImportPanel} from '@/features/gpxImport/GPXImportPanel';
 import {PhotoGrid} from '@/features/photoGrid/PhotoGrid';
 import {PaginationFooter} from '@/shared/components/PaginationFooter';
+import {cn} from '@/utils/cn';
 import {PHOTO_GRID_FADE_ANIMATION} from '@/utils/photoGrid';
 
 import type {TGPXPreviewResponse} from '@/features/gpxImport/gpxImportTypes';
@@ -16,9 +17,7 @@ import type {TViewMode} from '@/shared/types/view';
 import type {CSSProperties, ReactElement} from 'react';
 
 const listClass =
-	'flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-(--color-border) bg-(--color-surface)';
-const contentClass = 'flex min-h-0 flex-1 flex-col';
-
+	'flex h-auto min-h-0 flex-col overflow-hidden rounded-xl border border-(--color-border) bg-(--color-surface) md:h-full';
 type TPhotoListProps = {
 	backend: {
 		health: THealthResponse | null;
@@ -130,6 +129,7 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 
 	const shouldShowAlbumList = viewMode === 'album' && !selectedAlbumID;
 	const shouldShowAlbumDetail = viewMode === 'album' && Boolean(selectedAlbumID) && selectedAlbum !== null;
+	const isMobileAlbumDetail = shouldShowAlbumDetail;
 
 	const albumViewMissingCount = albums.reduce((sum, album) => sum + album.noGPSCount, 0);
 	const globalMissingCount = albums.length > 0 ? albumViewMissingCount : (health?.noGPSAssets ?? null);
@@ -174,6 +174,7 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 				onSyncAction={onRetrySyncAction}
 				albumName={effectiveAlbumName}
 				onBackAction={effectiveBackAction}
+				hideSettingsOnMobile={isMobileAlbumDetail}
 				trailingAction={view.trailingAction}
 			/>
 			{gpxPreview && (
@@ -186,7 +187,11 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 			{!gpxPreview && (
 				<div
 					key={contentKey}
-					className={contentClass}>
+					className={cn(
+						'flex min-h-0 flex-col',
+						!isMobileAlbumDetail && 'flex-1',
+						isMobileAlbumDetail && 'md:flex-1'
+					)}>
 					{shouldShowAlbumList && (
 						<div className={'flex-1 overflow-y-auto'}>
 							<AlbumList
@@ -207,6 +212,7 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 							isLoading={isLoadingAssets}
 							isSyncing={isSyncing}
 							error={assetsError}
+							mobileMaxRows={isMobileAlbumDetail ? 1.8 : undefined}
 						/>
 					)}
 					{!shouldShowAlbumList && total > 0 && (

@@ -46,6 +46,7 @@ type TFilterBarProps = {
 	onSyncAction: () => Promise<void>;
 	albumName?: string | null;
 	onBackAction?: () => void;
+	hideSettingsOnMobile?: boolean;
 	trailingAction?: ReactElement;
 };
 
@@ -95,6 +96,7 @@ export function FilterBar({
 	onSyncAction,
 	albumName,
 	onBackAction,
+	hideSettingsOnMobile = false,
 	trailingAction
 }: TFilterBarProps): ReactElement {
 	const [isOpen, setIsOpen] = useState(true);
@@ -176,38 +178,40 @@ export function FilterBar({
 						onBackAction={onBackAction}
 					/>
 				</div>
-				<button
-					onClick={() => {
-						void onSyncAction();
-					}}
-					disabled={isSyncing}
-					title={isSyncing ? 'Syncing...' : 'Resync with Immich'}
-					className={`${toolButtonClass} disabled:cursor-default disabled:opacity-40`}>
-					<svg
-						width={'12'}
-						height={'12'}
-						viewBox={'0 0 16 16'}
-						fill={'currentColor'}
-						className={isSyncing ? 'animate-spin' : ''}>
-						<path d={'M8 1a7 7 0 0 1 7 7h-1.5A5.5 5.5 0 0 0 8 2.5V1z'} />
-						<path d={'M8 15a7 7 0 0 1-7-7h1.5A5.5 5.5 0 0 0 8 13.5V15z'} />
-						<path d={'M8 1v2.5L10.5 2 8 1z'} />
-						<path d={'M8 15v-2.5L5.5 14 8 15z'} />
-					</svg>
-				</button>
-				<button
-					onClick={() => setIsOpen(value => !value)}
-					className={cn(
-						filterButtonClass,
-						isOpen && 'bg-(--color-primary) text-white',
-						!isOpen && 'bg-(--color-bg) text-(--color-text-secondary) hover:text-(--color-text)'
-					)}>
-					<FilterIcon />
-				</button>
-				{trailingAction && <div className={'ml-1'}>{trailingAction}</div>}
+				<div className={cn('flex items-center gap-2', hideSettingsOnMobile && 'hidden md:flex')}>
+					<button
+						onClick={() => {
+							void onSyncAction();
+						}}
+						disabled={isSyncing}
+						title={isSyncing ? 'Syncing...' : 'Resync with Immich'}
+						className={`${toolButtonClass} disabled:cursor-default disabled:opacity-40`}>
+						<svg
+							width={'12'}
+							height={'12'}
+							viewBox={'0 0 16 16'}
+							fill={'currentColor'}
+							className={isSyncing ? 'animate-spin' : ''}>
+							<path d={'M8 1a7 7 0 0 1 7 7h-1.5A5.5 5.5 0 0 0 8 2.5V1z'} />
+							<path d={'M8 15a7 7 0 0 1-7-7h1.5A5.5 5.5 0 0 0 8 13.5V15z'} />
+							<path d={'M8 1v2.5L10.5 2 8 1z'} />
+							<path d={'M8 15v-2.5L5.5 14 8 15z'} />
+						</svg>
+					</button>
+					<button
+						onClick={() => setIsOpen(value => !value)}
+						className={cn(
+							filterButtonClass,
+							isOpen && 'bg-(--color-primary) text-white',
+							!isOpen && 'bg-(--color-bg) text-(--color-text-secondary) hover:text-(--color-text)'
+						)}>
+						<FilterIcon />
+					</button>
+					{trailingAction && <div className={'ml-1'}>{trailingAction}</div>}
+				</div>
 			</div>
 			<div
-				className={FILTER_BAR_TRANSITION_CLASS}
+				className={cn(FILTER_BAR_TRANSITION_CLASS, hideSettingsOnMobile && 'hidden md:block')}
 				style={{
 					maxHeight: isOpen ? `${openPanelHeightPx}px` : '0px',
 					opacity: isOpen ? 1 : 0
@@ -289,7 +293,15 @@ export function FilterBar({
 					)}
 				</div>
 			</div>
-			{syncError && <div className={'px-3 pb-2 text-[0.6875rem] text-[#b91c1c]'}>{syncError}</div>}
+			{syncError && (
+				<div
+					className={cn(
+						'px-3 pb-2 text-[0.6875rem] text-[#b91c1c]',
+						hideSettingsOnMobile && 'hidden md:block'
+					)}>
+					{syncError}
+				</div>
+			)}
 		</div>
 	);
 }

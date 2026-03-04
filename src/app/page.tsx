@@ -9,7 +9,8 @@ import {AppProvider, useBackend} from '@/shared/context/AppContext';
 
 import type {ReactElement} from 'react';
 
-const layoutClass = 'grid h-screen gap-3 p-3 md:grid-cols-[minmax(20rem,var(--app-sidebar-width))_1fr]';
+const layoutClass =
+	'grid h-screen grid-rows-[auto_minmax(0,1fr)] gap-3 p-3 md:grid-cols-[minmax(20rem,var(--app-sidebar-width))_1fr] md:grid-rows-1';
 
 type TSideState = 'auth-loading' | 'auth-required' | 'backend-loading' | 'backend-error' | 'ready';
 type TMapState = 'auth' | 'backend-loading' | 'backend-error' | 'ready';

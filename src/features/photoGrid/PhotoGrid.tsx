@@ -8,6 +8,7 @@ import {PhotoGridStatePanels} from '@/features/photoGrid/PhotoGridStatePanels';
 import {usePhotoGridFocusScroll, usePhotoGridFocusSelection} from '@/features/photoGrid/useFocusedAsset';
 import {useVirtualizedGrid} from '@/features/photoGrid/useVirtualizedGrid';
 import {useSelection, useUIMap} from '@/shared/context/AppContext';
+import {cn} from '@/utils/cn';
 import {
 	PHOTO_GRID_FADE_ANIMATION_BASE_DELAY_MS,
 	PHOTO_GRID_FADE_ANIMATION_MAX_OFFSET,
@@ -18,7 +19,7 @@ import {
 
 import type {TAssetRow} from '@/shared/types/asset';
 import type {TGPSFilter} from '@/shared/types/map';
-import type {ReactElement} from 'react';
+import type {CSSProperties, ReactElement} from 'react';
 
 /**
  * Build a reusable staggered animation style for one photo tile.
@@ -43,6 +44,7 @@ type TPhotoGridProps = {
 	isLoading: boolean;
 	isSyncing: boolean;
 	error: string | null;
+	mobileMaxRows?: number;
 };
 
 /**
@@ -63,13 +65,22 @@ export function PhotoGrid({
 	gridColumns,
 	isLoading,
 	isSyncing,
-	error
+	error,
+	mobileMaxRows
 }: TPhotoGridProps): ReactElement {
 	const {focusedAssetID, clearFocusedAssetAction} = useUIMap();
 	const {toggleAssetAction, shiftSelectAction} = useSelection();
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const {handleScroll, rowHeight, startIndex, visibleAssets, topSpacerHeight, bottomSpacerHeight, viewportHeight} =
 		useVirtualizedGrid({assets, gridColumns, scrollResetKey, scrollContainerRef});
+	let mobileMaxHeightPx: number | null = null;
+	if (typeof mobileMaxRows === 'number' && Number.isFinite(mobileMaxRows) && mobileMaxRows > 0) {
+		mobileMaxHeightPx = rowHeight * mobileMaxRows + PHOTO_GRID_PADDING_PX * 2;
+	}
+	let mobileStyle: CSSProperties | undefined;
+	if (mobileMaxHeightPx !== null) {
+		mobileStyle = {'--photo-grid-mobile-max-height': `${mobileMaxHeightPx}px`} as CSSProperties;
+	}
 
 	usePhotoGridFocusSelection({
 		focusedAssetID,
@@ -90,7 +101,11 @@ export function PhotoGrid({
 		<div
 			ref={scrollContainerRef}
 			onScroll={handleScroll}
-			className={'flex flex-1 flex-col overflow-y-auto'}>
+			className={cn(
+				'flex flex-1 flex-col overflow-y-auto',
+				mobileMaxHeightPx !== null && 'max-h-[var(--photo-grid-mobile-max-height)] md:max-h-none'
+			)}
+			style={mobileStyle}>
 			<PhotoGridStatePanels
 				isLoading={isLoading}
 				isSyncing={isSyncing}
