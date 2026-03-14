@@ -8,6 +8,7 @@ import {
 	GEOCODE_UPSTREAM_TIMEOUT_MS,
 	GEOCODE_URL
 } from '@/utils/geocoding';
+import {getErrorMessage} from '@/utils/error';
 import {hasControlChars} from '@/utils/string';
 
 import type {TNominatimResult} from '@/shared/types/nominatim';
@@ -31,7 +32,7 @@ function validateQuery(raw: string | null): string | null {
 	return query;
 }
 
-function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+async function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
 		if (signal.aborted) {
 			reject(signal.reason);
@@ -47,13 +48,6 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
 		}, ms);
 		signal.addEventListener('abort', onAbort, {once: true});
 	});
-}
-
-function getUpstreamMessage(error: unknown): string {
-	if (error instanceof Error) {
-		return error.message;
-	}
-	return 'Unknown error';
 }
 
 async function attemptSearch(
@@ -122,7 +116,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 	console.error('[geocode] Retry failed:', second.error);
 
-	const upstreamMessage = getUpstreamMessage(second.error);
+	const upstreamMessage = getErrorMessage(second.error, 'Unknown error');
 
 	if (second.hasTimedOut) {
 		return NextResponse.json({error: 'Geocode request timed out.', upstream: upstreamMessage}, {status: 504});
