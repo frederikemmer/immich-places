@@ -58,12 +58,12 @@ export function PhotoListContainer(): ReactElement {
 		step: gpxStep,
 		isLoading: isGPXLoading,
 		error: gpxError,
-		preview: gpxPreview,
+		previews: gpxPreviews,
 		uploadAndPreview: gpxUploadAndPreview,
 		reset: gpxReset
 	} = useGPXImportContext();
 
-	const isGPXPanelActive = gpxStep === 'preview' && gpxPreview !== null;
+	const isGPXPanelActive = gpxStep === 'preview' && gpxPreviews.length > 0;
 
 	const selectedAlbum = useMemo<TAlbumRow | null>(
 		() => albums.find(album => album.immichID === selectedAlbumID) ?? null,
@@ -164,9 +164,14 @@ export function PhotoListContainer(): ReactElement {
 		gpxReset();
 	}, [confirmCloseAlbum, clearPendingState, gpxReset]);
 
+	const handleGPXAutoReset = useCallback((): void => {
+		clearPendingState();
+		gpxReset();
+	}, [clearPendingState, gpxReset]);
+
 	let gpxImportProp:
 		| {
-				uploadAndPreview: (file: File, maxGapSeconds?: number) => Promise<void>;
+				uploadAndPreview: (files: File[], maxGapSeconds?: number) => Promise<void>;
 				isLoading: boolean;
 				error: string | null;
 		  }
@@ -205,9 +210,9 @@ export function PhotoListContainer(): ReactElement {
 				onVisibleMarkerLimitAction: setVisibleMarkerLimitAction,
 				onViewModeAction: handleToggleViewMode,
 				onBackToAlbumsAction: handleBackToAlbums,
-				gpxPreview,
+				gpxPreviews: isGPXPanelActive ? gpxPreviews : [],
 				gpxError,
-				onGPXResetAction: gpxReset,
+				onGPXResetAction: handleGPXAutoReset,
 				onGPXCancelAction: handleGPXCancel,
 				trailingAction: <UserMenu gpxImport={gpxImportProp} />
 			}}

@@ -13,7 +13,7 @@ type TUseMapDropHandlersArgs = {
 	containerRef: MutableRefObject<HTMLDivElement | null>;
 	resolveAssetByID: (assetID: string) => TAssetRow | null;
 	onDropAction?: (asset: TAssetRow, position: {latitude: number; longitude: number}) => void;
-	onGPXFileDropAction?: (file: File) => void | Promise<void>;
+	onGPXFileDropAction?: (files: File[]) => void | Promise<void>;
 };
 
 /**
@@ -54,9 +54,9 @@ export function useMapDropHandlers({
 				return;
 			}
 
-			const droppedFile = dataTransfer.files[0];
-			if (droppedFile?.name.endsWith('.gpx')) {
-				onGPXFileDropAction?.(droppedFile);
+			const gpxFiles = Array.from(dataTransfer.files).filter(f => f.name.endsWith('.gpx'));
+			if (gpxFiles.length > 0) {
+				onGPXFileDropAction?.(gpxFiles);
 				return;
 			}
 
