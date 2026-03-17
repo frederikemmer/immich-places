@@ -88,7 +88,7 @@ export function PhotoCard({
 						src={thumbnailURL(asset.immichID)}
 						alt={''}
 						unoptimized
-						loading={'lazy'}
+						loading={'eager'}
 						fill
 						sizes={'20vw'}
 						onLoad={() => setIsImageLoaded(true)}
