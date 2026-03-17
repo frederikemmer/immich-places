@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	maxAssetsPageSize       = 120
+	maxAssetsPageSize       = 10000
 	defaultAssetsPageSize   = 20
 	maxPageInfoPageSize     = 500
 	defaultPageInfoPageSize = 90
