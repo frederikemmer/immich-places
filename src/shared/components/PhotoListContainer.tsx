@@ -4,7 +4,7 @@ import {useCallback, useMemo} from 'react';
 
 import {useAuth} from '@/features/auth/AuthContext';
 import {UserMenu} from '@/features/auth/UserMenu';
-import {useGPXImport} from '@/features/gpxImport/useGPXImport';
+import {useGPXImportContext} from '@/features/gpxImport/GPXImportContext';
 import {deriveAlreadyAppliedIDs} from '@/features/selection/selectionStateHelpers';
 import {PhotoList} from '@/shared/components/PhotoList';
 import {useBackend, useCatalog, useSelection, useUIMap, useView} from '@/shared/context/AppContext';
@@ -61,7 +61,7 @@ export function PhotoListContainer(): ReactElement {
 		preview: gpxPreview,
 		uploadAndPreview: gpxUploadAndPreview,
 		reset: gpxReset
-	} = useGPXImport();
+	} = useGPXImportContext();
 
 	const isGPXPanelActive = gpxStep === 'preview' && gpxPreview !== null;
 
@@ -71,11 +71,15 @@ export function PhotoListContainer(): ReactElement {
 	);
 
 	const albumMissingCount = albums.reduce((totalMissing, album) => totalMissing + album.noGPSCount, 0);
-	const missingCount = selectedAlbum
-		? selectedAlbum.noGPSCount
-		: albums.length > 0
-			? albumMissingCount
-			: (health?.noGPSAssets ?? null);
+
+	let missingCount: number | null;
+	if (selectedAlbum) {
+		missingCount = selectedAlbum.noGPSCount;
+	} else if (albums.length > 0) {
+		missingCount = albumMissingCount;
+	} else {
+		missingCount = health?.noGPSAssets ?? null;
+	}
 	const selectedIDs = useMemo(() => new Set(selectedAssets.map(a => a.immichID)), [selectedAssets]);
 	const alreadyAppliedIDs = useMemo(
 		() => deriveAlreadyAppliedIDs(pendingLocationsByAssetID),
@@ -166,13 +170,13 @@ export function PhotoListContainer(): ReactElement {
 				isLoading: boolean;
 				error: string | null;
 		  }
-		| undefined = {
-		uploadAndPreview: gpxUploadAndPreview,
-		isLoading: isGPXLoading,
-		error: gpxError
-	};
-	if (isGPXPanelActive) {
-		gpxImportProp = undefined;
+		| undefined;
+	if (!isGPXPanelActive) {
+		gpxImportProp = {
+			uploadAndPreview: gpxUploadAndPreview,
+			isLoading: isGPXLoading,
+			error: gpxError
+		};
 	}
 
 	return (

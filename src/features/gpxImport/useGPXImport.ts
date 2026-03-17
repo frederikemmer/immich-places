@@ -22,7 +22,7 @@ const INITIAL_STATE: TGPXImportState = {
 	preview: null
 };
 
-type TUseGPXImportReturn = TGPXImportState & {
+export type TUseGPXImportReturn = TGPXImportState & {
 	uploadAndPreview: (file: File, maxGapSeconds?: number) => Promise<void>;
 	reset: () => void;
 };
