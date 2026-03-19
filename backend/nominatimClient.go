@@ -30,7 +30,7 @@ func newNominatimClient() *NominatimClient {
 	}
 }
 
-func (n *NominatimClient) reverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+func (n *NominatimClient) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
 	key := fmt.Sprintf("%.2f,%.2f", lat, lon)
 
 	n.cacheMu.Lock()

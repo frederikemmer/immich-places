@@ -20,6 +20,8 @@ type Config struct {
 	EncryptionKey       string `env:"ENCRYPTION_KEY,notEmpty"`
 	DawarichURL         string `env:"DAWARICH_URL"`
 	DefaultTimezone     string `env:"DEFAULT_TIMEZONE"`
+	GeocodeProvider     string `env:"GEOCODE_PROVIDER" envDefault:"nominatim"`
+	GeocodeAPIKey       string `env:"GEOCODE_API_KEY"`
 
 	defaultTimezoneLocation *time.Location
 }

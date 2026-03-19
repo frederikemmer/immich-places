@@ -193,7 +193,7 @@ func TestSyncAlbumsErrorPropagation(t *testing.T) {
 	db := newTestDB(t)
 	svc := newSyncService(db, factory, newNominatimClient())
 
-	svc.syncAlbums(context.Background(), testUserID, immich)
+	svc.syncAlbums(context.Background(), testUserID, immich, false)
 
 	var count int
 	db.db.QueryRow("SELECT COUNT(*) FROM albumAssets WHERE albumID = ?", "album1").Scan(&count)
@@ -277,7 +277,7 @@ func TestNominatimRetryAfterSeconds(t *testing.T) {
 	originalLimit := client.limiter.Limit()
 
 	ctx := context.Background()
-	result, err := client.reverseGeocode(ctx, 48.85, 2.35)
+	result, err := client.ReverseGeocode(ctx, 48.85, 2.35)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestNominatimRetryAfterHTTPDate(t *testing.T) {
 	originalLimit := client.limiter.Limit()
 
 	ctx := context.Background()
-	result, err := client.reverseGeocode(ctx, 48.85, 2.35)
+	result, err := client.ReverseGeocode(ctx, 48.85, 2.35)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -988,7 +988,7 @@ func TestSyncAlbumsSuccess(t *testing.T) {
 	seedAsset(t, db, "a2", ptr(40.71), ptr(-74.0), "2024-01-02T12:00:00Z")
 
 	svc := newSyncService(db, factory, newNominatimClient())
-	err := svc.syncAlbums(ctx, testUserID, immich)
+	err := svc.syncAlbums(ctx, testUserID, immich, false)
 	if err != nil {
 		t.Fatalf("syncAlbums: %v", err)
 	}

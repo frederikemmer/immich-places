@@ -24,7 +24,7 @@ const (
 type SyncService struct {
 	db                SyncStore
 	immichFactory     *ImmichClientFactory
-	nominatim         *NominatimClient
+	geocoder          GeocodeProvider
 	mu                sync.Mutex
 	userSyncing       map[string]bool
 	userCancels       map[string]context.CancelFunc
@@ -33,11 +33,11 @@ type SyncService struct {
 	freqLocGeneration atomic.Int64
 }
 
-func newSyncService(db SyncStore, factory *ImmichClientFactory, nominatim *NominatimClient) *SyncService {
+func newSyncService(db SyncStore, factory *ImmichClientFactory, geocoder GeocodeProvider) *SyncService {
 	return &SyncService{
 		db:            db,
 		immichFactory: factory,
-		nominatim:     nominatim,
+		geocoder:      geocoder,
 		userSyncing:   make(map[string]bool),
 		userCancels:   make(map[string]context.CancelFunc),
 		shutdownCtx:   context.Background(),
@@ -405,7 +405,9 @@ func (s *SyncService) recomputeFrequentLocations(ctx context.Context, userID str
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		s.enrichFrequentLocationLabels(ctx, userID, clusters, gen)
+		// Use shutdownCtx instead of the sync context so enrichment
+		// is not cancelled when the sync finishes.
+		s.enrichFrequentLocationLabels(s.shutdownCtx, userID, clusters, gen)
 	}()
 }
 
@@ -415,9 +417,9 @@ func (s *SyncService) enrichFrequentLocationLabels(ctx context.Context, userID s
 	for i := range clusters {
 		i := i
 		g.Go(func() error {
-			geocodeCtx, geocodeCancel := context.WithTimeout(ctx, 10*time.Second)
+			geocodeCtx, geocodeCancel := context.WithTimeout(ctx, 20*time.Second)
 			defer geocodeCancel()
-			label, err := s.nominatim.reverseGeocode(geocodeCtx, clusters[i].Latitude, clusters[i].Longitude)
+			label, err := s.geocoder.ReverseGeocode(geocodeCtx, clusters[i].Latitude, clusters[i].Longitude)
 			if err != nil {
 				log.Printf("Failed to geocode cluster: %v", err)
 				return nil
