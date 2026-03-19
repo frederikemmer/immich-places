@@ -12,11 +12,13 @@ import {
 	GPS_FILTER_WITH_GPS,
 	HIDDEN_FILTER_DEFAULT,
 	URL_PARAM_ALBUM_ID,
+	URL_PARAM_END_DATE,
 	URL_PARAM_GPS_FILTER,
 	URL_PARAM_GRID_COLUMNS,
 	URL_PARAM_HIDDEN_FILTER,
 	URL_PARAM_MARKER_LIMIT,
 	URL_PARAM_PAGE_SIZE,
+	URL_PARAM_START_DATE,
 	URL_PARAM_VIEW_MODE,
 	VIEW_MODE_DEFAULT,
 	clampVisibleMarkerLimit
@@ -25,9 +27,6 @@ import {
 import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 
-/**
- * URL-backed filter state managed by the filter bar.
- */
 type TURLSyncState = {
 	gpsFilter: TGPSFilter;
 	hiddenFilter: THiddenFilter;
@@ -36,11 +35,10 @@ type TURLSyncState = {
 	pageSize: number;
 	gridColumns: number;
 	visibleMarkerLimit: number;
+	startDate: string | null;
+	endDate: string | null;
 };
 
-/**
- * Public return contract for URL-backed filter state hook.
- */
 type TURLState = {
 	gpsFilter: TGPSFilter;
 	setGPSFilterRawAction: (filter: TGPSFilter) => void;
@@ -56,13 +54,14 @@ type TURLState = {
 	setViewModeAction: (mode: TViewMode) => void;
 	selectedAlbumID: string | null;
 	setSelectedAlbumIDAction: (albumID: string | null) => void;
+	startDate: string | null;
+	setStartDateAction: (date: string | null) => void;
+	endDate: string | null;
+	setEndDateAction: (date: string | null) => void;
 	buildURL: (state?: Partial<TURLSyncState>) => string;
 	syncURLAction: (state?: Partial<TURLSyncState>) => void;
 };
 
-/**
- * Browser adapter for reading and writing URL-related state.
- */
 type TURLSyncEnvironment = {
 	readSearch: () => string;
 	readPathname: () => string;
@@ -72,12 +71,6 @@ type TURLSyncEnvironment = {
 
 const MAX_ALBUM_ID_LENGTH = 256;
 
-/**
- * Sanitizes and validates album IDs coming from URL parameters.
- *
- * @param albumID - Raw album ID value.
- * @returns A safe album ID string or `null` when invalid.
- */
 function sanitizeAlbumID(albumID: string | null): string | null {
 	if (!albumID) {
 		return null;
@@ -86,26 +79,12 @@ function sanitizeAlbumID(albumID: string | null): string | null {
 	if (!trimmed || trimmed.length > MAX_ALBUM_ID_LENGTH) {
 		return null;
 	}
-	if (/\s/.test(trimmed)) {
-		return null;
-	}
-	for (let i = 0; i < trimmed.length; i += 1) {
-		const code = trimmed.charCodeAt(i);
-		if ((code >= 0 && code <= 31) || code === 127) {
-			return null;
-		}
-	}
-	if (/[^\x20-\x7E]/.test(trimmed)) {
+	if (/\s/.test(trimmed) || /[^\x20-\x7E]/.test(trimmed)) {
 		return null;
 	}
 	return trimmed;
 }
 
-/**
- * Builds a browser URL sync environment or returns null in non-browser runtimes.
- *
- * @returns A sync environment object when `window` is available, otherwise `null`.
- */
 function createBrowserURLSync(): TURLSyncEnvironment | null {
 	if (typeof window === 'undefined') {
 		return null;
@@ -126,28 +105,17 @@ function createBrowserURLSync(): TURLSyncEnvironment | null {
 	};
 }
 
-/**
- * Converts a numeric URL parameter into an allowed value or default.
- *
- * @param value - Raw string value from URLSearchParams.
- * @param defaultsTo - Fallback value when parsing fails.
- * @param allowed - Set of values allowed by the app.
- * @returns Parsed integer or fallback.
- */
 function normalizePageParam(value: string | null, defaultsTo: number, allowed: Set<number>): number {
 	const parsed = Number.parseInt(value ?? '', 10);
 	if (!Number.isFinite(parsed)) {
 		return defaultsTo;
 	}
-	return allowed.has(parsed) ? parsed : defaultsTo;
+	if (allowed.has(parsed)) {
+		return parsed;
+	}
+	return defaultsTo;
 }
 
-/**
- * Converts a raw URL marker-limit parameter into a valid marker limit.
- *
- * @param value - Raw marker-limit query value.
- * @returns Marker-limit value clamped to supported bounds.
- */
 function normalizeVisibleMarkerLimitParam(value: string | null): number {
 	const parsed = Number.parseInt(value ?? '', 10);
 	if (!Number.isFinite(parsed)) {
@@ -156,12 +124,6 @@ function normalizeVisibleMarkerLimitParam(value: string | null): number {
 	return clampVisibleMarkerLimit(parsed);
 }
 
-/**
- * Parses and validates URL GPS filter parameter.
- *
- * @param value - Candidate GPS filter value.
- * @returns A supported GPS filter value.
- */
 function parseGPSFilter(value: string | null): TGPSFilter {
 	if (value === GPS_FILTER_NO_GPS || value === GPS_FILTER_WITH_GPS) {
 		return value;
@@ -176,14 +138,26 @@ function parseHiddenFilter(value: string | null): THiddenFilter {
 	return HIDDEN_FILTER_DEFAULT;
 }
 
-/**
- * Serializes active filter state into query string format.
- *
- * Omits default-valued params to keep URLs compact.
- *
- * @param state - Full synchronization state.
- * @returns A query string (starting with `?`) or empty string.
- */
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseURLDate(value: string | null): string | null {
+	if (value && ISO_DATE_PATTERN.test(value)) {
+		return value;
+	}
+	return null;
+}
+
+function resolveNullableOverride<TKey extends keyof TURLSyncState>(
+	state: Partial<TURLSyncState> | undefined,
+	key: TKey,
+	fallback: TURLSyncState[TKey]
+): TURLSyncState[TKey] {
+	if (state !== undefined && Object.prototype.hasOwnProperty.call(state, key)) {
+		return (state[key] ?? null) as TURLSyncState[TKey];
+	}
+	return fallback;
+}
+
 function buildURLFromState(state: TURLSyncState): string {
 	const params = new URLSearchParams();
 	if (state.gpsFilter !== GPS_FILTER_DEFAULT) {
@@ -210,68 +184,57 @@ function buildURLFromState(state: TURLSyncState): string {
 	if (state.visibleMarkerLimit !== DEFAULT_VISIBLE_MARKER_LIMIT) {
 		params.set(URL_PARAM_MARKER_LIMIT, String(state.visibleMarkerLimit));
 	}
+	if (state.startDate) {
+		params.set(URL_PARAM_START_DATE, state.startDate);
+	}
+	if (state.endDate) {
+		params.set(URL_PARAM_END_DATE, state.endDate);
+	}
 	const query = params.toString();
-	return query ? `?${query}` : '';
+	if (!query) {
+		return '';
+	}
+	return `?${query}`;
 }
 
-/**
- * Reads URL search params and applies values to provided state setters.
- *
- * Falls back to defaults when values are missing or invalid.
- *
- * @param search - The current query string (with or without leading `?`).
- * @param setGPSFilterRawAction - Setter for GPS filter.
- * @param setViewModeAction - Setter for view mode.
- * @param setSelectedAlbumIDAction - Setter for selected album id.
- * @param setPageSizeAction - Setter for page size option.
- * @param setGridColumnsAction - Setter for grid columns option.
- */
-function applyURLToState(
-	search: string,
-	setGPSFilterRawAction: (filter: TGPSFilter) => void,
-	setHiddenFilterRawAction: (filter: THiddenFilter) => void,
-	setViewModeAction: (mode: TViewMode) => void,
-	setSelectedAlbumIDAction: (albumID: string | null) => void,
-	setPageSizeAction: (size: number) => void,
-	setGridColumnsAction: (cols: number) => void,
-	setVisibleMarkerLimitAction: (limit: number) => void
-): void {
+type TURLStateSetters = {
+	setGPSFilter: (filter: TGPSFilter) => void;
+	setHiddenFilter: (filter: THiddenFilter) => void;
+	setViewMode: (mode: TViewMode) => void;
+	setSelectedAlbumID: (albumID: string | null) => void;
+	setPageSize: (size: number) => void;
+	setGridColumns: (cols: number) => void;
+	setVisibleMarkerLimit: (limit: number) => void;
+	setStartDate: (date: string | null) => void;
+	setEndDate: (date: string | null) => void;
+};
+
+function applyURLToState(search: string, setters: TURLStateSetters): void {
 	if (typeof window === 'undefined') {
 		return;
 	}
 
 	const params = new URLSearchParams(search);
-	const urlGPS = params.get(URL_PARAM_GPS_FILTER);
-	setGPSFilterRawAction(parseGPSFilter(urlGPS));
-	setHiddenFilterRawAction(parseHiddenFilter(params.get(URL_PARAM_HIDDEN_FILTER)));
+	setters.setGPSFilter(parseGPSFilter(params.get(URL_PARAM_GPS_FILTER)));
+	setters.setHiddenFilter(parseHiddenFilter(params.get(URL_PARAM_HIDDEN_FILTER)));
 
 	const urlView = params.get(URL_PARAM_VIEW_MODE);
 	if (urlView === 'timeline' || urlView === 'album') {
-		setViewModeAction(urlView);
+		setters.setViewMode(urlView);
 	} else {
-		setViewModeAction(VIEW_MODE_DEFAULT);
+		setters.setViewMode(VIEW_MODE_DEFAULT);
 	}
 
-	setSelectedAlbumIDAction(sanitizeAlbumID(params.get(URL_PARAM_ALBUM_ID)));
-
-	const urlPageSize = params.get(URL_PARAM_PAGE_SIZE);
-	setPageSizeAction(normalizePageParam(urlPageSize, DEFAULT_PAGE_SIZE, ALLOWED_PAGE_SIZES));
-
-	const urlGridCols = params.get(URL_PARAM_GRID_COLUMNS);
-	setGridColumnsAction(normalizePageParam(urlGridCols, DEFAULT_GRID_COLUMNS, ALLOWED_GRID_COLUMNS));
-
-	const urlVisibleMarkerLimit = params.get(URL_PARAM_MARKER_LIMIT);
-	setVisibleMarkerLimitAction(normalizeVisibleMarkerLimitParam(urlVisibleMarkerLimit));
+	setters.setSelectedAlbumID(sanitizeAlbumID(params.get(URL_PARAM_ALBUM_ID)));
+	setters.setPageSize(normalizePageParam(params.get(URL_PARAM_PAGE_SIZE), DEFAULT_PAGE_SIZE, ALLOWED_PAGE_SIZES));
+	setters.setGridColumns(
+		normalizePageParam(params.get(URL_PARAM_GRID_COLUMNS), DEFAULT_GRID_COLUMNS, ALLOWED_GRID_COLUMNS)
+	);
+	setters.setVisibleMarkerLimit(normalizeVisibleMarkerLimitParam(params.get(URL_PARAM_MARKER_LIMIT)));
+	setters.setStartDate(parseURLDate(params.get(URL_PARAM_START_DATE)));
+	setters.setEndDate(parseURLDate(params.get(URL_PARAM_END_DATE)));
 }
 
-/**
- * Hook exposing filter state synchronized with URL search params.
- *
- * Provides controlled values and actions for GPS filter, view mode, album id,
- * page size and grid columns, plus URL builders and sync helpers.
- *
- * @returns A state bundle used by the filter and page-level controllers.
- */
 export function useURLState(): TURLState {
 	const urlSync = useMemo(() => createBrowserURLSync(), []);
 	const [gpsFilter, setGPSFilterRawAction] = useState<TGPSFilter>(GPS_FILTER_DEFAULT);
@@ -281,69 +244,72 @@ export function useURLState(): TURLState {
 	const [visibleMarkerLimit, setVisibleMarkerLimitAction] = useState(DEFAULT_VISIBLE_MARKER_LIMIT);
 	const [viewMode, setViewModeAction] = useState<TViewMode>(VIEW_MODE_DEFAULT);
 	const [selectedAlbumID, setSelectedAlbumIDAction] = useState<string | null>(null);
+	const [startDate, setStartDateAction] = useState<string | null>(null);
+	const [endDate, setEndDateAction] = useState<string | null>(null);
 
 	const buildURL = useCallback(
 		(state?: Partial<TURLSyncState>) => {
-			const hasSelectedAlbumID =
-				state !== undefined && Object.prototype.hasOwnProperty.call(state, 'selectedAlbumID');
-			const nextState = {
+			const nextState: TURLSyncState = {
 				gpsFilter: state?.gpsFilter ?? gpsFilter,
 				hiddenFilter: state?.hiddenFilter ?? hiddenFilter,
 				viewMode: state?.viewMode ?? viewMode,
-				selectedAlbumID: hasSelectedAlbumID ? (state.selectedAlbumID ?? null) : selectedAlbumID,
+				selectedAlbumID: resolveNullableOverride(state, 'selectedAlbumID', selectedAlbumID),
 				pageSize: state?.pageSize ?? pageSize,
 				gridColumns: state?.gridColumns ?? gridColumns,
-				visibleMarkerLimit: state?.visibleMarkerLimit ?? visibleMarkerLimit
+				visibleMarkerLimit: state?.visibleMarkerLimit ?? visibleMarkerLimit,
+				startDate: resolveNullableOverride(state, 'startDate', startDate),
+				endDate: resolveNullableOverride(state, 'endDate', endDate)
 			};
 			return buildURLFromState(nextState);
 		},
-		[gpsFilter, hiddenFilter, viewMode, selectedAlbumID, pageSize, gridColumns, visibleMarkerLimit]
+		[
+			gpsFilter,
+			hiddenFilter,
+			viewMode,
+			selectedAlbumID,
+			pageSize,
+			gridColumns,
+			visibleMarkerLimit,
+			startDate,
+			endDate
+		]
 	);
 
 	const syncURLAction = useCallback(
 		(state?: Partial<TURLSyncState>) => {
-			const activeURLSync = urlSync;
-			if (!activeURLSync) {
+			if (!urlSync) {
 				return;
 			}
 			const nextSearch = buildURL(state);
-			const fullPath = `${activeURLSync.readPathname()}${nextSearch}`;
-			activeURLSync.replacePath(fullPath);
+			const fullPath = `${urlSync.readPathname()}${nextSearch}`;
+			urlSync.replacePath(fullPath);
 		},
 		[urlSync, buildURL]
 	);
 
 	useEffect(() => {
-		const activeURLSync = urlSync;
-		if (!activeURLSync) {
+		if (!urlSync) {
 			return;
 		}
-		const readSearch = activeURLSync.readSearch;
-		applyURLToState(
-			readSearch(),
-			setGPSFilterRawAction,
-			setHiddenFilterRawAction,
-			setViewModeAction,
-			setSelectedAlbumIDAction,
-			setPageSizeAction,
-			setGridColumnsAction,
-			setVisibleMarkerLimitAction
-		);
+		const readSearch = urlSync.readSearch;
+		const setters: TURLStateSetters = {
+			setGPSFilter: setGPSFilterRawAction,
+			setHiddenFilter: setHiddenFilterRawAction,
+			setViewMode: setViewModeAction,
+			setSelectedAlbumID: setSelectedAlbumIDAction,
+			setPageSize: setPageSizeAction,
+			setGridColumns: setGridColumnsAction,
+			setVisibleMarkerLimit: setVisibleMarkerLimitAction,
+			setStartDate: setStartDateAction,
+			setEndDate: setEndDateAction
+		};
+		applyURLToState(readSearch(), setters);
 
 		function handlePopstate(): void {
-			applyURLToState(
-				readSearch(),
-				setGPSFilterRawAction,
-				setHiddenFilterRawAction,
-				setViewModeAction,
-				setSelectedAlbumIDAction,
-				setPageSizeAction,
-				setGridColumnsAction,
-				setVisibleMarkerLimitAction
-			);
+			applyURLToState(readSearch(), setters);
 		}
 
-		const removeListener = activeURLSync.subscribePopstate(handlePopstate);
+		const removeListener = urlSync.subscribePopstate(handlePopstate);
 		return () => {
 			removeListener();
 		};
@@ -364,6 +330,10 @@ export function useURLState(): TURLState {
 		setViewModeAction,
 		selectedAlbumID,
 		setSelectedAlbumIDAction,
+		startDate,
+		setStartDateAction,
+		endDate,
+		setEndDateAction,
 		buildURL,
 		syncURLAction
 	};

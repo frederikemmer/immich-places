@@ -9,9 +9,6 @@ import type {TViewContextValue} from '@/shared/types/context';
 import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 
-/**
- * View domain values and action contract exposed by URL-backed state.
- */
 type TViewDomain = {
 	gpsFilter: TGPSFilter;
 	hiddenFilter: THiddenFilter;
@@ -24,26 +21,17 @@ type TViewDomain = {
 	viewMode: TViewMode;
 	setViewModeAction: (mode: TViewMode) => void;
 	selectedAlbumID: string | null;
+	startDate: string | null;
+	endDate: string | null;
 	setGPSFilterRawAction: (filter: TGPSFilter) => void;
 	setHiddenFilterRawAction: (filter: THiddenFilter) => void;
 	setSelectedAlbumIDAction: (albumID: string | null) => void;
 	setGPSFilterAction: TViewContextValue['setGPSFilterAction'];
 	setHiddenFilterAction: TViewContextValue['setHiddenFilterAction'];
 	selectAlbumAction: TViewContextValue['selectAlbumAction'];
+	setDateRangeAction: (startDate: string | null, endDate: string | null) => void;
 };
 
-/**
- * Builds view-domain actions that keep URL state synchronized.
- *
- * Wraps raw setters with no-op guards and URL sync for:
- * - GPS filter
- * - page size
- * - grid columns
- * - view mode
- * - selected album
- *
- * @returns Normalized view domain values and handlers.
- */
 export function useViewDomain(): TViewDomain {
 	const {
 		gpsFilter,
@@ -60,6 +48,10 @@ export function useViewDomain(): TViewDomain {
 		setViewModeAction,
 		selectedAlbumID,
 		setSelectedAlbumIDAction,
+		startDate,
+		setStartDateAction,
+		endDate,
+		setEndDateAction,
 		syncURLAction
 	} = useURLState();
 
@@ -96,11 +88,6 @@ export function useViewDomain(): TViewDomain {
 		[pageSize, setPageSizeAction, syncURLAction]
 	);
 
-	/**
-	 * Update grid columns only when changed and sync it to URL.
-	 *
-	 * @param cols - New column count.
-	 */
 	const handleSetGridColumns = useCallback(
 		(cols: number) => {
 			if (cols === gridColumns) {
@@ -112,11 +99,6 @@ export function useViewDomain(): TViewDomain {
 		[gridColumns, setGridColumnsAction, syncURLAction]
 	);
 
-	/**
-	 * Update visible marker limit only when changed and sync it to URL.
-	 *
-	 * @param limit - New visible marker cap.
-	 */
 	const handleSetVisibleMarkerLimit = useCallback(
 		(limit: number) => {
 			const normalizedLimit = clampVisibleMarkerLimit(limit);
@@ -129,11 +111,6 @@ export function useViewDomain(): TViewDomain {
 		[visibleMarkerLimit, setVisibleMarkerLimitAction, syncURLAction]
 	);
 
-	/**
-	 * Update view mode only when changed and sync it to URL.
-	 *
-	 * @param mode - New timeline/album view mode.
-	 */
 	const handleSetViewMode = useCallback(
 		(mode: TViewMode) => {
 			if (mode === viewMode) {
@@ -145,17 +122,21 @@ export function useViewDomain(): TViewDomain {
 		[viewMode, setViewModeAction, syncURLAction]
 	);
 
-	/**
-	 * Update active album selection and sync it to URL.
-	 *
-	 * @param albumID - Selected album ID or null.
-	 */
 	const selectAlbumAction = useCallback(
 		(albumID: string | null) => {
 			setSelectedAlbumIDAction(albumID);
 			syncURLAction({selectedAlbumID: albumID});
 		},
 		[setSelectedAlbumIDAction, syncURLAction]
+	);
+
+	const setDateRangeAction = useCallback(
+		(nextStartDate: string | null, nextEndDate: string | null) => {
+			setStartDateAction(nextStartDate);
+			setEndDateAction(nextEndDate);
+			syncURLAction({startDate: nextStartDate, endDate: nextEndDate});
+		},
+		[setStartDateAction, setEndDateAction, syncURLAction]
 	);
 
 	return {
@@ -172,9 +153,12 @@ export function useViewDomain(): TViewDomain {
 		viewMode,
 		setViewModeAction: handleSetViewMode,
 		selectedAlbumID,
+		startDate,
+		endDate,
 		setSelectedAlbumIDAction,
 		setGPSFilterAction: setGPSFilter,
 		setHiddenFilterAction: setHiddenFilter,
-		selectAlbumAction
+		selectAlbumAction,
+		setDateRangeAction
 	};
 }
