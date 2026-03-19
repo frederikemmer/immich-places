@@ -127,7 +127,7 @@ type assetFilter struct {
 	aliased    bool
 }
 
-func buildAssetFilter(userID, albumID string, withGPS bool, hiddenFilter string) assetFilter {
+func buildAssetFilter(userID, albumID string, withGPS bool, hiddenFilter, startDate, endDate string) assetFilter {
 	var f assetFilter
 	if albumID != "" {
 		f.aliased = true
@@ -150,6 +150,14 @@ func buildAssetFilter(userID, albumID string, withGPS bool, hiddenFilter string)
 		default:
 			f.fromClause += ` AND a.isHidden = 0`
 		}
+		if startDate != "" {
+			f.fromClause += ` AND a.dateTimeOriginal >= ?`
+			f.args = append(f.args, startDate)
+		}
+		if endDate != "" {
+			f.fromClause += ` AND a.dateTimeOriginal < ?`
+			f.args = append(f.args, endDate+"T99")
+		}
 	} else {
 		f.fromClause = `FROM assets WHERE userID = ? AND`
 		f.args = append(f.args, userID)
@@ -168,12 +176,20 @@ func buildAssetFilter(userID, albumID string, withGPS bool, hiddenFilter string)
 		default:
 			f.fromClause += ` AND isHidden = 0`
 		}
+		if startDate != "" {
+			f.fromClause += ` AND dateTimeOriginal >= ?`
+			f.args = append(f.args, startDate)
+		}
+		if endDate != "" {
+			f.fromClause += ` AND dateTimeOriginal < ?`
+			f.args = append(f.args, endDate+"T99")
+		}
 	}
 	return f
 }
 
-func (d *Database) getFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter string, page, pageSize int) ([]AssetRow, error) {
-	f := buildAssetFilter(userID, albumID, withGPS, hiddenFilter)
+func (d *Database) getFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter, startDate, endDate string, page, pageSize int) ([]AssetRow, error) {
+	f := buildAssetFilter(userID, albumID, withGPS, hiddenFilter, startDate, endDate)
 
 	cols := assetColumns
 	orderPrefix := ""
@@ -195,13 +211,41 @@ func (d *Database) getFilteredAssets(ctx context.Context, userID, albumID string
 	return scanAssetRows(rows)
 }
 
-func (d *Database) countFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter string) (int, error) {
-	f := buildAssetFilter(userID, albumID, withGPS, hiddenFilter)
+func (d *Database) countFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter, startDate, endDate string) (int, error) {
+	f := buildAssetFilter(userID, albumID, withGPS, hiddenFilter, startDate, endDate)
 	query := `SELECT COUNT(*) ` + f.fromClause
 
 	var count int
 	err := d.db.QueryRowContext(ctx, query, f.args...).Scan(&count)
 	return count, err
+}
+
+func (d *Database) countAssetsByDay(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter, startDate, endDate string) (map[string]int, error) {
+	f := buildAssetFilter(userID, albumID, withGPS, hiddenFilter, startDate, endDate)
+
+	dateCol := "dateTimeOriginal"
+	if f.aliased {
+		dateCol = "a.dateTimeOriginal"
+	}
+
+	query := fmt.Sprintf(`SELECT DATE(%s) as day, COUNT(*) as cnt %s AND %s IS NOT NULL GROUP BY day`, dateCol, f.fromClause, dateCol)
+
+	rows, err := d.db.QueryContext(ctx, query, f.args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var day string
+		var cnt int
+		if err := rows.Scan(&day, &cnt); err != nil {
+			return nil, err
+		}
+		counts[day] = cnt
+	}
+	return counts, rows.Err()
 }
 
 type markerFilter struct {

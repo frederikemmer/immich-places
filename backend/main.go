@@ -56,6 +56,7 @@ func main() {
 	protectedMux := http.NewServeMux()
 	protectedMux.HandleFunc("GET /albums", handlers.handleGetAlbums)
 	protectedMux.HandleFunc("GET /assets", handlers.handleGetAssets)
+	protectedMux.HandleFunc("GET /assets/day-counts", handlers.handleGetAssetDayCounts)
 	protectedMux.HandleFunc("GET /map-markers", handlers.handleGetMapMarkers)
 	protectedMux.HandleFunc("GET /assets/{assetID}/thumbnail", handlers.handleGetThumbnail)
 	protectedMux.HandleFunc("GET /assets/{assetID}/preview", handlers.handleGetPreview)

@@ -27,8 +27,9 @@ type HandlerStore interface {
 	getSyncState(ctx context.Context, userID, key string) (*string, error)
 	countAssets(ctx context.Context, userID string) (int, error)
 	countNoGPSAssets(ctx context.Context, userID string) (int, error)
-	getFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter string, page, pageSize int) ([]AssetRow, error)
-	countFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter string) (int, error)
+	getFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter, startDate, endDate string, page, pageSize int) ([]AssetRow, error)
+	countFilteredAssets(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter, startDate, endDate string) (int, error)
+	countAssetsByDay(ctx context.Context, userID, albumID string, withGPS bool, hiddenFilter, startDate, endDate string) (map[string]int, error)
 	updateAssetHidden(ctx context.Context, userID, immichID string, isHidden bool) error
 	bulkUpdateAssetHidden(ctx context.Context, userID string, immichIDs []string, isHidden bool) error
 	getMapMarkers(ctx context.Context, userID, albumID string, bounds *TViewportBounds, limit int) ([]MapMarker, error)
@@ -38,8 +39,8 @@ type HandlerStore interface {
 	getFrequentLocations(ctx context.Context, userID string, limit int) ([]FrequentLocationRow, error)
 	getAssetPageInfo(ctx context.Context, userID, assetID string, albumID string, pageSize int) (*AssetPageInfo, error)
 	getAssetByID(ctx context.Context, userID, immichID string) (*AssetRow, error)
-	getAlbumsWithNoGPSCount(ctx context.Context, userID string) ([]AlbumRow, error)
-	getAlbumsWithGPSCount(ctx context.Context, userID string) ([]AlbumRow, error)
+	getAlbumsWithNoGPSCount(ctx context.Context, userID, startDate, endDate string) ([]AlbumRow, error)
+	getAlbumsWithGPSCount(ctx context.Context, userID, startDate, endDate string) ([]AlbumRow, error)
 	getAssetsWithTimestamps(ctx context.Context, userID string, includeGeotagged bool, timeStart, timeEnd string) ([]AssetRow, error)
 	getFavoritePlaces(ctx context.Context, userID string) ([]FavoritePlaceRow, error)
 	addFavoritePlace(ctx context.Context, userID string, latitude, longitude float64, displayName string) error

@@ -138,6 +138,21 @@ func (h *Handlers) handleGetAssets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	startDate := r.URL.Query().Get("startDate")
+	endDate := r.URL.Query().Get("endDate")
+	if startDate != "" {
+		if _, err := time.Parse("2006-01-02", startDate); err != nil {
+			writeError(w, http.StatusBadRequest, "startDate must be a valid date (YYYY-MM-DD)")
+			return
+		}
+	}
+	if endDate != "" {
+		if _, err := time.Parse("2006-01-02", endDate); err != nil {
+			writeError(w, http.StatusBadRequest, "endDate must be a valid date (YYYY-MM-DD)")
+			return
+		}
+	}
+
 	if page < 1 {
 		writeError(w, http.StatusBadRequest, "page must be >= 1")
 		return
@@ -147,13 +162,13 @@ func (h *Handlers) handleGetAssets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assets, err := h.db.getFilteredAssets(ctx, user.ID, albumID, withGPS, hiddenFilter, page, pageSize)
+	assets, err := h.db.getFilteredAssets(ctx, user.ID, albumID, withGPS, hiddenFilter, startDate, endDate, page, pageSize)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to query assets")
 		return
 	}
 
-	total, err := h.db.countFilteredAssets(ctx, user.ID, albumID, withGPS, hiddenFilter)
+	total, err := h.db.countFilteredAssets(ctx, user.ID, albumID, withGPS, hiddenFilter, startDate, endDate)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to count assets")
 		return
@@ -172,6 +187,45 @@ func (h *Handlers) handleGetAssets(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handlers) handleGetAssetDayCounts(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := getUserFromContext(r)
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+
+	albumID := r.URL.Query().Get("albumID")
+	withGPS := r.URL.Query().Get("gpsFilter") == "with-gps"
+	hiddenFilter := r.URL.Query().Get("hiddenFilter")
+	if hiddenFilter == "" {
+		hiddenFilter = hiddenFilterVisible
+	}
+	startDate := r.URL.Query().Get("startDate")
+	endDate := r.URL.Query().Get("endDate")
+
+	if startDate == "" || endDate == "" {
+		writeError(w, http.StatusBadRequest, "startDate and endDate are required")
+		return
+	}
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		writeError(w, http.StatusBadRequest, "startDate must be a valid date (YYYY-MM-DD)")
+		return
+	}
+	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		writeError(w, http.StatusBadRequest, "endDate must be a valid date (YYYY-MM-DD)")
+		return
+	}
+
+	counts, err := h.db.countAssetsByDay(ctx, user.ID, albumID, withGPS, hiddenFilter, startDate, endDate)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to count assets by day")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, counts)
+}
+
 func (h *Handlers) handleGetAlbums(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := getUserFromContext(r)
@@ -180,14 +234,16 @@ func (h *Handlers) handleGetAlbums(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	gpsFilter := r.URL.Query().Get("gpsFilter")
+	startDate := r.URL.Query().Get("startDate")
+	endDate := r.URL.Query().Get("endDate")
 
 	var albums []AlbumRow
 	var err error
 
 	if gpsFilter == "with-gps" {
-		albums, err = h.db.getAlbumsWithGPSCount(ctx, user.ID)
+		albums, err = h.db.getAlbumsWithGPSCount(ctx, user.ID, startDate, endDate)
 	} else {
-		albums, err = h.db.getAlbumsWithNoGPSCount(ctx, user.ID)
+		albums, err = h.db.getAlbumsWithNoGPSCount(ctx, user.ID, startDate, endDate)
 	}
 
 	if err != nil {
