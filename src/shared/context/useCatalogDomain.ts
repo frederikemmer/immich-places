@@ -10,21 +10,17 @@ import type {TCatalogContextValue} from '@/shared/types/context';
 import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 
-/**
- * Inputs used to derive catalog data loading behavior.
- */
 type TUseCatalogDomainArgs = {
 	gpsFilter: TGPSFilter;
 	hiddenFilter: THiddenFilter;
 	pageSize: number;
 	viewMode: TViewMode;
 	selectedAlbumID: string | null;
+	startDate: string | null;
+	endDate: string | null;
 	isReady: boolean;
 };
 
-/**
- * Result of catalog domain orchestration.
- */
 type TUseCatalogDomainResult = {
 	albums: TCatalogContextValue['albums'];
 	albumsError: TCatalogContextValue['albumsError'];
@@ -41,24 +37,20 @@ type TUseCatalogDomainResult = {
 	clearCatalog: () => void;
 };
 
-/**
- * Creates catalog slice state for album list and asset paging.
- *
- * Coordinates album filter behavior, page loading, and initial bootstrap loading
- * through shared album/assets hooks.
- *
- * @param args - GPS filter, page size, view mode, album selection, readiness flag.
- * @returns Album/asset loading state and actions.
- */
 export function useCatalogDomain({
 	gpsFilter,
 	hiddenFilter,
 	pageSize,
 	viewMode,
 	selectedAlbumID,
+	startDate,
+	endDate,
 	isReady
 }: TUseCatalogDomainArgs): TUseCatalogDomainResult {
-	const albumFilter = viewMode === 'album' ? selectedAlbumID : null;
+	let albumFilter: string | null = null;
+	if (viewMode === 'album') {
+		albumFilter = selectedAlbumID;
+	}
 	const focusPageRef = useRef<number | null>(null);
 
 	const {
@@ -70,14 +62,14 @@ export function useCatalogDomain({
 		removeAsset,
 		loadPageAction,
 		clear: clearAssets
-	} = useAssets(gpsFilter, hiddenFilter, pageSize, albumFilter, focusPageRef);
+	} = useAssets(gpsFilter, hiddenFilter, pageSize, albumFilter, startDate, endDate, focusPageRef);
 	const {
 		albums,
 		isLoading: isLoadingAlbums,
 		error: albumsError,
 		load: loadAlbumsAction,
 		clear: clearAlbums
-	} = useAlbums(gpsFilter);
+	} = useAlbums(gpsFilter, startDate, endDate);
 
 	const clearCatalog = useCallback(() => {
 		clearAssets();

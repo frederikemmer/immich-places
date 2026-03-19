@@ -10,9 +10,6 @@ import type {TAssetRow} from '@/shared/types/asset';
 import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
 import type {MutableRefObject} from 'react';
 
-/**
- * Return value for `useAssets`, describing loaded photo list state and mutators.
- */
 type TUseAssetsReturn = {
 	assets: TAssetRow[];
 	total: number;
@@ -24,23 +21,13 @@ type TUseAssetsReturn = {
 	clear: () => void;
 };
 
-/**
- * Loads and manages paginated photo assets for the photo grid.
- *
- * Supports filter/page invalidation, abortable fetches, optimistic removal of
- * deleted assets, and focus-page restoration when requested.
- *
- * @param gpsFilter - GPS filter mode passed to the asset API.
- * @param pageSize - Page size used for network requests.
- * @param albumID - Optional album scope for fetching assets.
- * @param focusPageRef - Optional ref used to request a specific page load.
- * @returns Grid data and state-mutating helpers.
- */
 export function useAssets(
 	gpsFilter: TGPSFilter,
 	hiddenFilter: THiddenFilter,
 	pageSize: number,
 	albumID?: string | null,
+	startDate?: string | null,
+	endDate?: string | null,
 	focusPageRef?: MutableRefObject<number | null>
 ): TUseAssetsReturn {
 	const [assets, setAssets] = useState<TAssetRow[]>([]);
@@ -70,6 +57,8 @@ export function useAssets(
 					gpsFilter,
 					hiddenFilter,
 					albumID ?? undefined,
+					startDate ?? undefined,
+					endDate ?? undefined,
 					{
 						signal: controller.signal
 					}
@@ -87,31 +76,41 @@ export function useAssets(
 				if (requestIDRef.current !== requestID) {
 					return;
 				}
-				setError(err instanceof Error ? err.message : 'Failed to load assets');
+				if (err instanceof Error) {
+					setError(err.message);
+				} else {
+					setError('Failed to load assets');
+				}
 			} finally {
 				if (requestIDRef.current === requestID) {
 					setIsLoading(false);
 				}
 			}
 		},
-		[albumID, gpsFilter, hiddenFilter, pageSize]
+		[albumID, gpsFilter, hiddenFilter, startDate, endDate, pageSize]
 	);
 
 	const prevAlbumID = useRef(albumID);
 	const prevGPSFilter = useRef(gpsFilter);
 	const prevHiddenFilter = useRef(hiddenFilter);
 	const prevPageSize = useRef(pageSize);
+	const prevStartDate = useRef(startDate);
+	const prevEndDate = useRef(endDate);
 	useEffect(() => {
 		if (
 			prevAlbumID.current !== albumID ||
 			prevGPSFilter.current !== gpsFilter ||
 			prevHiddenFilter.current !== hiddenFilter ||
-			prevPageSize.current !== pageSize
+			prevPageSize.current !== pageSize ||
+			prevStartDate.current !== startDate ||
+			prevEndDate.current !== endDate
 		) {
 			prevAlbumID.current = albumID;
 			prevGPSFilter.current = gpsFilter;
 			prevHiddenFilter.current = hiddenFilter;
 			prevPageSize.current = pageSize;
+			prevStartDate.current = startDate;
+			prevEndDate.current = endDate;
 			setAssets([]);
 			setTotal(0);
 			setCurrentPage(1);
@@ -121,7 +120,7 @@ export function useAssets(
 			}
 			void loadPageAction(page);
 		}
-	}, [albumID, gpsFilter, hiddenFilter, pageSize, loadPageAction, focusPageRef]);
+	}, [albumID, gpsFilter, hiddenFilter, pageSize, startDate, endDate, loadPageAction, focusPageRef]);
 
 	useEffect(() => {
 		return () => {
