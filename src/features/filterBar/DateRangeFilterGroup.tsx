@@ -157,7 +157,6 @@ function resolveCountOpacity(hasCount: boolean, isHighlighted: boolean): string 
 }
 
 function CountDayButton({
-	className: _className, // eslint-disable-line @typescript-eslint/no-unused-vars -- destructured to exclude from rest props
 	day,
 	modifiers,
 	count,
@@ -168,6 +167,7 @@ function CountDayButton({
 	const countOpacity = resolveCountOpacity(hasCount, isHighlighted);
 	return (
 		<button
+			{...props}
 			className={cn(
 				'flex h-full w-full flex-col items-center justify-center rounded-md text-[0.8125rem] font-normal transition-colors',
 				'hover:bg-(--accent) hover:text-(--accent-foreground)',
@@ -183,8 +183,7 @@ function CountDayButton({
 				modifiers.today && !modifiers.selected && 'bg-(--accent) text-(--accent-foreground)',
 				modifiers.outside && 'text-(--muted-foreground)/40',
 				modifiers.disabled && 'text-(--muted-foreground) opacity-50'
-			)}
-			{...props}>
+			)}>
 			<span className={'leading-none'}>{day.date.getDate()}</span>
 			<span className={cn('mt-0.5 text-[0.5625rem] leading-none tabular-nums', countOpacity)}>
 				{hasCount && count}
