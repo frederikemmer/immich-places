@@ -10,9 +10,13 @@ import {
 	getMe,
 	isAuthErrorWithCode
 } from '@/features/auth/authApi';
+import {
+	deleteDawarichSettings as apiDeleteDawarichSettings,
+	saveDawarichSettings as apiSaveDawarichSettings
+} from '@/features/dawarich/dawarichApi';
 import {clearLibraryCache} from '@/features/librarySettings/LibrarySettingsDialog';
-import {getErrorMessage} from '@/utils/error';
 import {PLACE_SEARCH_HISTORY_KEY} from '@/features/search/constant';
+import {getErrorMessage} from '@/utils/error';
 
 import type {TAuthUser, TMeResponse} from '@/shared/types/auth';
 import type {ReactElement, ReactNode} from 'react';
@@ -23,6 +27,7 @@ import type {ReactElement, ReactNode} from 'react';
 type TAuthContextValueProps = {
 	user: TAuthUser | null;
 	hasImmichAPIKey: boolean;
+	hasDawarichCredentials: boolean;
 	hasLibraries: boolean;
 	mapMarkerCount: number;
 	isLoading: boolean;
@@ -32,6 +37,8 @@ type TAuthContextValueProps = {
 	logout: () => Promise<void>;
 	refreshUser: () => Promise<void>;
 	updateAPIKey: (key: string) => Promise<boolean>;
+	updateDawarichSettings: (apiKey: string) => Promise<boolean>;
+	deleteDawarichSettings: () => Promise<boolean>;
 };
 
 const AuthContext = createContext<TAuthContextValueProps | null>(null);
@@ -70,6 +77,7 @@ function isNotAuthenticatedError(error: unknown): boolean {
 export function AuthProvider({children}: {children: ReactNode}): ReactElement {
 	const [user, setUser] = useState<TAuthUser | null>(null);
 	const [hasImmichAPIKey, setHasImmichAPIKey] = useState(false);
+	const [hasDawarichCredentials, setHasDawarichCredentials] = useState(false);
 	const [hasLibraries, setHasLibraries] = useState(false);
 	const [mapMarkerCount, setMapMarkerCount] = useState(0);
 	const [isLoading, setIsLoading] = useState(true);
@@ -78,6 +86,7 @@ export function AuthProvider({children}: {children: ReactNode}): ReactElement {
 	const applyMeResponse = useCallback((me: TMeResponse) => {
 		setUser(me.user);
 		setHasImmichAPIKey(me.hasImmichAPIKey);
+		setHasDawarichCredentials(me.hasDawarichCredentials);
 		setHasLibraries(me.hasLibraries);
 		setMapMarkerCount(me.mapMarkerCount);
 		setError(null);
@@ -86,6 +95,7 @@ export function AuthProvider({children}: {children: ReactNode}): ReactElement {
 	const clearAuthState = useCallback(() => {
 		setUser(null);
 		setHasImmichAPIKey(false);
+		setHasDawarichCredentials(false);
 		setHasLibraries(false);
 		setMapMarkerCount(0);
 		setError(null);
@@ -191,11 +201,39 @@ export function AuthProvider({children}: {children: ReactNode}): ReactElement {
 		[applyMeResponse]
 	);
 
+	const updateDawarichSettings = useCallback(
+		async (apiKey: string): Promise<boolean> => {
+			setError(null);
+			try {
+				const me = await apiSaveDawarichSettings(apiKey);
+				applyMeResponse(me);
+				return true;
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Failed to save Dawarich settings');
+				return false;
+			}
+		},
+		[applyMeResponse]
+	);
+
+	const deleteDawarichSettings = useCallback(async (): Promise<boolean> => {
+		setError(null);
+		try {
+			const me = await apiDeleteDawarichSettings();
+			applyMeResponse(me);
+			return true;
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to delete Dawarich settings');
+			return false;
+		}
+	}, [applyMeResponse]);
+
 	return (
 		<AuthContext.Provider
 			value={{
 				user,
 				hasImmichAPIKey,
+				hasDawarichCredentials,
 				hasLibraries,
 				mapMarkerCount,
 				isLoading,
@@ -204,7 +242,9 @@ export function AuthProvider({children}: {children: ReactNode}): ReactElement {
 				register,
 				logout: logoutFn,
 				refreshUser,
-				updateAPIKey
+				updateAPIKey,
+				updateDawarichSettings,
+				deleteDawarichSettings
 			}}>
 			{children}
 		</AuthContext.Provider>
