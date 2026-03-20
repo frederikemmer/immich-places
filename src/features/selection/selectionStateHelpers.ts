@@ -1,5 +1,10 @@
 import type {TAssetRow} from '@/shared/types/asset';
-import type {TPendingLocation, TPendingLocationsByAssetID} from '@/shared/types/map';
+import type {
+	TGPXStatusFilter,
+	TPendingLocation,
+	TPendingLocationsByAssetID,
+	TSetLocationOptions
+} from '@/shared/types/map';
 
 export function resolveAnchorID(lastClickedID: string | null, nextSelected: TAssetRow[]): string | null {
 	if (nextSelected.length === 0) {
@@ -26,21 +31,85 @@ export function buildTargetAssetIDs(targetAssetIDs: string[] | undefined, select
 	return selectedAssetIDs;
 }
 
-export function createPendingLocation(
-	latitude: number,
-	longitude: number,
-	source: TPendingLocation['source'],
-	sourceLabel?: string,
-	isAlreadyApplied?: boolean
-): TPendingLocation {
-	const location: TPendingLocation = {latitude, longitude, source};
-	if (sourceLabel) {
-		location.sourceLabel = sourceLabel;
+type TCreatePendingLocationOptions = {
+	latitude: number;
+	longitude: number;
+	source: TPendingLocation['source'];
+	sourceLabel?: string;
+	isAlreadyApplied?: boolean;
+	hasExistingLocation?: boolean;
+	originalLatitude?: number;
+	originalLongitude?: number;
+};
+
+export function createPendingLocation(options: TCreatePendingLocationOptions): TPendingLocation {
+	const location: TPendingLocation = {
+		latitude: options.latitude,
+		longitude: options.longitude,
+		source: options.source
+	};
+	if (options.sourceLabel) {
+		location.sourceLabel = options.sourceLabel;
 	}
-	if (isAlreadyApplied) {
+	if (options.isAlreadyApplied) {
 		location.isAlreadyApplied = true;
 	}
+	if (options.hasExistingLocation !== undefined) {
+		location.hasExistingLocation = options.hasExistingLocation;
+	}
+	if (options.originalLatitude !== undefined && options.originalLongitude !== undefined) {
+		location.originalLatitude = options.originalLatitude;
+		location.originalLongitude = options.originalLongitude;
+	}
 	return location;
+}
+
+export function matchesGPXStatusFilter(
+	filter: TGPXStatusFilter,
+	isAlreadyApplied: boolean,
+	hasExistingLocation: boolean
+): boolean {
+	switch (filter) {
+		case 'all':
+			return true;
+		case 'alreadySet':
+			return isAlreadyApplied;
+		case 'new':
+			return !isAlreadyApplied && !hasExistingLocation;
+		case 'edited':
+			return !isAlreadyApplied && hasExistingLocation;
+	}
+}
+
+export function hasGPXPendingEntries(pendingLocationsByAssetID: TPendingLocationsByAssetID): boolean {
+	return Object.values(pendingLocationsByAssetID).some(loc => loc.source === 'gpx-import');
+}
+
+export function buildNextPendingLocations(
+	prev: TPendingLocationsByAssetID,
+	nextAssetIDs: string[],
+	nextPendingLocation: TPendingLocation,
+	options: TSetLocationOptions
+): TPendingLocationsByAssetID {
+	const next = {...prev};
+	for (const assetID of nextAssetIDs) {
+		const existing = prev[assetID];
+		if (existing?.source === 'gpx-import') {
+			next[assetID] = createPendingLocation({
+				latitude: options.latitude,
+				longitude: options.longitude,
+				source: 'gpx-import',
+				sourceLabel: existing.sourceLabel,
+				isAlreadyApplied: options.isAlreadyApplied ?? existing.isAlreadyApplied,
+				hasExistingLocation: options.hasExistingLocation ?? existing.hasExistingLocation,
+				originalLatitude: options.originalLatitude ?? existing.originalLatitude,
+				originalLongitude: options.originalLongitude ?? existing.originalLongitude
+			});
+		} else {
+			next[assetID] = nextPendingLocation;
+		}
+	}
+	return next;
 }
 
 export function deriveAlreadyAppliedIDs(pendingLocationsByAssetID: TPendingLocationsByAssetID): Set<string> {

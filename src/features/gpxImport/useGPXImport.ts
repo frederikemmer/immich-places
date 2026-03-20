@@ -24,6 +24,7 @@ const INITIAL_STATE: TGPXImportState = {
 
 export type TUseGPXImportReturn = TGPXImportState & {
 	uploadAndPreview: (files: File[], maxGapSeconds?: number) => Promise<void>;
+	setPreviews: (previews: TGPXPreviewResponse[]) => void;
 	reset: () => void;
 };
 
@@ -36,7 +37,7 @@ export function useGPXImport(): TUseGPXImportReturn {
 		}
 		setState(prev => ({...prev, step: 'upload', isLoading: true, error: null}));
 
-		const results = await Promise.allSettled(files.map(file => gpxPreview(file, maxGapSeconds)));
+		const results = await Promise.allSettled(files.map(async file => gpxPreview(file, maxGapSeconds)));
 
 		const successes: TGPXPreviewResponse[] = [];
 		const errors: string[] = [];
@@ -71,6 +72,15 @@ export function useGPXImport(): TUseGPXImportReturn {
 		});
 	}, []);
 
+	const setPreviews = useCallback((previews: TGPXPreviewResponse[]) => {
+		setState({
+			step: 'preview',
+			isLoading: false,
+			error: null,
+			previews
+		});
+	}, []);
+
 	const reset = useCallback(() => {
 		setState(INITIAL_STATE);
 	}, []);
@@ -78,6 +88,7 @@ export function useGPXImport(): TUseGPXImportReturn {
 	return {
 		...state,
 		uploadAndPreview,
+		setPreviews,
 		reset
 	};
 }
