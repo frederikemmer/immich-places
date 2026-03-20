@@ -3,6 +3,7 @@ import type {TAssetRow} from '@/shared/types/asset';
 import type {THealthResponse} from '@/shared/types/health';
 import type {
 	TGPSFilter,
+	TGPXStatusFilter,
 	THiddenFilter,
 	TPendingLocation,
 	TPendingLocationsByAssetID,
@@ -85,6 +86,8 @@ export type TSelectionContextValue = {
 	canRedoLocation: boolean;
 	beginLocationBatch: () => void;
 	endLocationBatch: () => void;
+	gpxStatusFilter: TGPXStatusFilter;
+	setGPXStatusFilterAction: (filter: TGPXStatusFilter) => void;
 };
 
 export type TSelectionSaveStatus = 'noop' | 'saved';
