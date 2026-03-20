@@ -29,8 +29,6 @@ export const MAP_ICON_BADGE_PADDING_PX = 4;
 const MAP_ICON_SHADOW_OFFSET_Y_PX = 2;
 /** Blur radius for marker icon drop shadows. */
 const MAP_ICON_SHADOW_BLUR_PX = 6;
-/** Alpha channel for base marker icon shadow. */
-const MAP_ICON_SHADOW_BASE_ALPHA = 0.25;
 /** Alpha channel for selected marker icon shadow. */
 const MAP_ICON_SELECTED_SHADOW_ALPHA = 0.3;
 /** Alpha channel for unselected marker icon shadow. */
@@ -41,8 +39,6 @@ export const MAP_ICON_SELECTED_BORDER = `${MAP_ICON_BORDER_WIDTH_PX}px solid ${M
 export const MAP_ICON_DEFAULT_BORDER = `${MAP_ICON_BORDER_WIDTH_PX}px solid #fff`;
 /** Gradient fill for default map icon fill. */
 export const MAP_ICON_GRADIENT = `linear-gradient(145deg, ${MAP_ICON_PRIMARY_COLOR}, ${MAP_ICON_GRADIENT_MID_COLOR})`;
-/** Base box shadow style for map icons. */
-const MAP_ICON_SHADOW = `0 ${MAP_ICON_SHADOW_OFFSET_Y_PX}px ${MAP_ICON_SHADOW_BLUR_PX}px rgba(0,0,0,${MAP_ICON_SHADOW_BASE_ALPHA})`;
 /** Selected state shadow for prominent map icons. */
 export const MAP_ICON_SELECTED_SHADOW = `0 0 0 ${MAP_ICON_BORDER_WIDTH_PX}px ${MAP_ICON_PRIMARY_COLOR}, 0 ${MAP_ICON_SHADOW_OFFSET_Y_PX}px ${MAP_ICON_SHADOW_BLUR_PX}px rgba(0,0,0,${MAP_ICON_SELECTED_SHADOW_ALPHA})`;
 /** Unselected state shadow for muted map icons. */
