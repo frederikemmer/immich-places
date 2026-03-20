@@ -11,7 +11,7 @@ import (
 	"github.com/ringsaturn/tzf"
 )
 
-const coordTolerance = 1e-6
+const coordTolerance = 4.5e-5
 
 var trackPointTimeFormats = []string{
 	time.RFC3339,
@@ -129,6 +129,25 @@ func parseGPX(data []byte) (parsedGPX, error) {
 	return parsedGPX{name: trackName, points: points}, nil
 }
 
+func buildMatchResult(asset AssetRow, lat, lon, ele float64, gap int, alreadyApplied bool) GPXMatchResult {
+	hasExisting := asset.Latitude != nil && asset.Longitude != nil
+	result := GPXMatchResult{
+		AssetID:             asset.ImmichID,
+		FileName:            asset.OriginalFileName,
+		Latitude:            lat,
+		Longitude:           lon,
+		Elevation:           ele,
+		TimeGap:             gap,
+		IsAlreadyApplied:    alreadyApplied,
+		HasExistingLocation: hasExisting,
+	}
+	if hasExisting {
+		result.ExistingLatitude = asset.Latitude
+		result.ExistingLongitude = asset.Longitude
+	}
+	return result
+}
+
 func matchAssetsToTrack(assets []AssetRow, track []trackPoint, maxGapSeconds int, trackTimezone *time.Location) []GPXMatchResult {
 	if len(track) < 2 {
 		return []GPXMatchResult{}
@@ -171,15 +190,7 @@ func matchAssetsToTrack(assets []AssetRow, track []trackPoint, maxGapSeconds int
 				continue
 			}
 			alreadyApplied := coordsMatch(asset.Latitude, track[0].latitude) && coordsMatch(asset.Longitude, track[0].longitude)
-			matches = append(matches, GPXMatchResult{
-				AssetID:          asset.ImmichID,
-				FileName:         asset.OriginalFileName,
-				Latitude:         track[0].latitude,
-				Longitude:        track[0].longitude,
-				Elevation:        track[0].elevation,
-				TimeGap:          int(gap.Seconds()),
-				IsAlreadyApplied: alreadyApplied,
-			})
+			matches = append(matches, buildMatchResult(asset, track[0].latitude, track[0].longitude, track[0].elevation, int(gap.Seconds()), alreadyApplied))
 			continue
 		}
 
@@ -190,15 +201,7 @@ func matchAssetsToTrack(assets []AssetRow, track []trackPoint, maxGapSeconds int
 			}
 			last := track[len(track)-1]
 			alreadyApplied := coordsMatch(asset.Latitude, last.latitude) && coordsMatch(asset.Longitude, last.longitude)
-			matches = append(matches, GPXMatchResult{
-				AssetID:          asset.ImmichID,
-				FileName:         asset.OriginalFileName,
-				Latitude:         last.latitude,
-				Longitude:        last.longitude,
-				Elevation:        last.elevation,
-				TimeGap:          int(gap.Seconds()),
-				IsAlreadyApplied: alreadyApplied,
-			})
+			matches = append(matches, buildMatchResult(asset, last.latitude, last.longitude, last.elevation, int(gap.Seconds()), alreadyApplied))
 			continue
 		}
 
@@ -221,15 +224,7 @@ func matchAssetsToTrack(assets []AssetRow, track []trackPoint, maxGapSeconds int
 		}
 
 		alreadyApplied := coordsMatch(asset.Latitude, lat) && coordsMatch(asset.Longitude, lon)
-		matches = append(matches, GPXMatchResult{
-			AssetID:          asset.ImmichID,
-			FileName:         asset.OriginalFileName,
-			Latitude:         lat,
-			Longitude:        lon,
-			Elevation:        ele,
-			TimeGap:          int(closerGap.Seconds()),
-			IsAlreadyApplied: alreadyApplied,
-		})
+		matches = append(matches, buildMatchResult(asset, lat, lon, ele, int(closerGap.Seconds()), alreadyApplied))
 	}
 
 	return matches
