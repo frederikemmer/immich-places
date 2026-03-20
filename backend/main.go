@@ -44,6 +44,7 @@ func main() {
 	handlers := newHandlers(db, immichFactory, cfg.ImmichExternalURL, syncService, suggestions, cfg.defaultTimezoneLocation)
 	libraryHandlers := newLibraryHandlers(db, immichFactory, syncService)
 	authHandlers := newAuthHandlers(db, immichFactory, syncService, cfg.RegistrationEnabled, !cfg.AllowInsecure)
+	dawarichHandlers := newDawarichHandlers(db, cfg.DawarichURL, cfg.defaultTimezoneLocation)
 
 	authMux := http.NewServeMux()
 	authMux.HandleFunc("POST /auth/register", authHandlers.handleRegister)
@@ -76,6 +77,10 @@ func main() {
 	protectedMux.HandleFunc("POST /favorite-places", handlers.handleAddFavoritePlace)
 	protectedMux.HandleFunc("DELETE /favorite-places", handlers.handleRemoveFavoritePlace)
 	protectedMux.HandleFunc("POST /gpx/preview", handlers.handleGPXPreview)
+	protectedMux.HandleFunc("PUT /dawarich/settings", dawarichHandlers.handleDawarichSettings)
+	protectedMux.HandleFunc("DELETE /dawarich/settings", dawarichHandlers.handleDeleteDawarichSettings)
+	protectedMux.HandleFunc("GET /dawarich/tracks", dawarichHandlers.handleDawarichTracks)
+	protectedMux.HandleFunc("POST /dawarich/preview", dawarichHandlers.handleDawarichPreview)
 
 	mainMux := http.NewServeMux()
 	mainMux.HandleFunc("GET /health", handlers.handleHealth)
@@ -105,7 +110,7 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		WriteTimeout:      150 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 

@@ -18,6 +18,7 @@ type Config struct {
 	AllowInsecure       bool   `env:"ALLOW_INSECURE" envDefault:"false"`
 	RegistrationEnabled bool   `env:"REGISTRATION_ENABLED" envDefault:"true"`
 	EncryptionKey       string `env:"ENCRYPTION_KEY,notEmpty"`
+	DawarichURL         string `env:"DAWARICH_URL"`
 	DefaultTimezone     string `env:"DEFAULT_TIMEZONE"`
 
 	defaultTimezoneLocation *time.Location
