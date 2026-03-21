@@ -54,7 +54,7 @@ func (h *DawarichHandlers) respondWithRefreshedUser(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, buildMeResponse(r.Context(), h.db, updated))
+	writeMeResponse(w, r, h.db, updated)
 }
 
 func (h *DawarichHandlers) handleDawarichSettings(w http.ResponseWriter, r *http.Request) {

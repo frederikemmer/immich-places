@@ -43,6 +43,7 @@ export function AuthSidebar(): ReactElement {
 function AuthForms(): ReactElement {
 	const [view, setView] = useState<TAuthView>('login');
 	const [isRegistrationEnabled, setIsRegistrationEnabled] = useState(false);
+	const [statusError, setStatusError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const controller = new AbortController();
@@ -51,13 +52,16 @@ function AuthForms(): ReactElement {
 				if (controller.signal.aborted) {
 					return;
 				}
+				setStatusError(null);
 				setIsRegistrationEnabled(status.registrationEnabled);
 			})
-			.catch(() => {
+			.catch((error: unknown) => {
 				if (controller.signal.aborted) {
 					return;
 				}
 				setIsRegistrationEnabled(false);
+				const message = error instanceof Error ? error.message : 'Failed to reach the server';
+				setStatusError(message);
 			});
 
 		return () => {
@@ -73,6 +77,7 @@ function AuthForms(): ReactElement {
 		<LoginForm
 			onSwitchToRegisterAction={() => setView('register')}
 			registrationEnabled={isRegistrationEnabled}
+			statusError={statusError}
 		/>
 	);
 }
@@ -86,10 +91,12 @@ function AuthForms(): ReactElement {
  */
 function LoginForm({
 	onSwitchToRegisterAction,
-	registrationEnabled
+	registrationEnabled,
+	statusError
 }: {
 	onSwitchToRegisterAction: () => void;
 	registrationEnabled: boolean;
+	statusError: string | null;
 }): ReactElement {
 	const {login, error} = useAuth();
 	const [email, setEmail] = useState('');
@@ -127,6 +134,7 @@ function LoginForm({
 					required
 					autoComplete={'current-password'}
 				/>
+				{statusError && <p className={'text-sm text-amber-600 text-center'}>{statusError}</p>}
 				{error && <p className={'text-sm text-red-600 text-center'}>{error}</p>}
 				<button
 					type={'submit'}
