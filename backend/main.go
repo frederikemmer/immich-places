@@ -38,12 +38,15 @@ func main() {
 	defer db.close()
 
 	immichFactory := newImmichClientFactory(cfg.ImmichURL)
-	nominatim := newNominatimClient()
-	syncService := newSyncService(db, immichFactory, nominatim)
+	geocodeTimeout := time.Duration(cfg.GeocodeTimeoutSecs) * time.Second
+	geocoder := newGeocodeProvider(cfg.GeocodeProvider, cfg.GeocodeAPIKey, geocodeTimeout)
+	log.Printf("Geocode provider: %s (timeout: %v)", cfg.GeocodeProvider, geocodeTimeout)
+	syncService := newSyncService(db, immichFactory, geocoder)
 	suggestions := newSuggestionService(db)
-	handlers := newHandlers(db, immichFactory, cfg.ImmichExternalURL, syncService, suggestions, cfg.defaultTimezoneLocation)
+	handlers := newHandlers(db, immichFactory, cfg.ImmichExternalURL, syncService, suggestions, cfg.defaultTimezoneLocation, geocoder)
 	libraryHandlers := newLibraryHandlers(db, immichFactory, syncService)
 	authHandlers := newAuthHandlers(db, immichFactory, syncService, cfg.RegistrationEnabled, !cfg.AllowInsecure)
+	dawarichHandlers := newDawarichHandlers(db, cfg.DawarichURL, cfg.defaultTimezoneLocation)
 
 	authMux := http.NewServeMux()
 	authMux.HandleFunc("POST /auth/register", authHandlers.handleRegister)
@@ -56,6 +59,7 @@ func main() {
 	protectedMux := http.NewServeMux()
 	protectedMux.HandleFunc("GET /albums", handlers.handleGetAlbums)
 	protectedMux.HandleFunc("GET /assets", handlers.handleGetAssets)
+	protectedMux.HandleFunc("GET /assets/day-counts", handlers.handleGetAssetDayCounts)
 	protectedMux.HandleFunc("GET /map-markers", handlers.handleGetMapMarkers)
 	protectedMux.HandleFunc("GET /assets/{assetID}/thumbnail", handlers.handleGetThumbnail)
 	protectedMux.HandleFunc("GET /assets/{assetID}/preview", handlers.handleGetPreview)
@@ -75,6 +79,11 @@ func main() {
 	protectedMux.HandleFunc("POST /favorite-places", handlers.handleAddFavoritePlace)
 	protectedMux.HandleFunc("DELETE /favorite-places", handlers.handleRemoveFavoritePlace)
 	protectedMux.HandleFunc("POST /gpx/preview", handlers.handleGPXPreview)
+	protectedMux.HandleFunc("PUT /dawarich/settings", dawarichHandlers.handleDawarichSettings)
+	protectedMux.HandleFunc("DELETE /dawarich/settings", dawarichHandlers.handleDeleteDawarichSettings)
+	protectedMux.HandleFunc("GET /dawarich/tracks", dawarichHandlers.handleDawarichTracks)
+	protectedMux.HandleFunc("POST /dawarich/preview", dawarichHandlers.handleDawarichPreview)
+	protectedMux.HandleFunc("GET /geocode/search", handlers.handleGeocodeSearch)
 
 	mainMux := http.NewServeMux()
 	mainMux.HandleFunc("GET /health", handlers.handleHealth)
@@ -104,7 +113,7 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		WriteTimeout:      150 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 

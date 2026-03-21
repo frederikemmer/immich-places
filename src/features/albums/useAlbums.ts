@@ -7,13 +7,6 @@ import {fetchAlbums} from '@/shared/services/backendApi';
 import type {TAlbumRow} from '@/shared/types/album';
 import type {TGPSFilter} from '@/shared/types/map';
 
-/**
- * Albums hook return contract.
- * `albums` is the resolved list of album rows for the current filter.
- * `isLoading` is true while a fetch request is in progress.
- * `error` is a human-readable message if the request fails.
- * `load` triggers a refresh of the album list.
- */
 type TUseAlbumsReturnProps = {
 	albums: TAlbumRow[];
 	isLoading: boolean;
@@ -22,17 +15,11 @@ type TUseAlbumsReturnProps = {
 	clear: () => void;
 };
 
-/**
- * Fetches and caches album rows with safe cancellation on rapid filter changes.
- *
- * The hook aborts any in-flight request when a new filter change occurs so stale
- * responses cannot overwrite the latest data.
- *
- * @param gpsFilter - Active GPS filter used by the backend query.
- *   - gpsFilter: Active GPS filter used by the backend query.
- * @returns Album list state and a reload action.
- */
-export function useAlbums(gpsFilter: TGPSFilter): TUseAlbumsReturnProps {
+export function useAlbums(
+	gpsFilter: TGPSFilter,
+	startDate: string | null,
+	endDate: string | null
+): TUseAlbumsReturnProps {
 	const [albums, setAlbums] = useState<TAlbumRow[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -49,7 +36,9 @@ export function useAlbums(gpsFilter: TGPSFilter): TUseAlbumsReturnProps {
 		setIsLoading(true);
 		setError(null);
 		try {
-			const result = await fetchAlbums(gpsFilter, {signal: controller.signal});
+			const result = await fetchAlbums(gpsFilter, startDate ?? undefined, endDate ?? undefined, {
+				signal: controller.signal
+			});
 			if (requestIDRef.current !== requestID) {
 				return;
 			}
@@ -61,22 +50,27 @@ export function useAlbums(gpsFilter: TGPSFilter): TUseAlbumsReturnProps {
 			if (requestIDRef.current !== requestID) {
 				return;
 			}
-			setError(err instanceof Error ? err.message : 'Failed to load albums');
+			if (err instanceof Error) {
+				setError(err.message);
+			} else {
+				setError('Failed to load albums');
+			}
 		} finally {
 			if (requestIDRef.current === requestID) {
 				setIsLoading(false);
 			}
 		}
-	}, [gpsFilter]);
+	}, [gpsFilter, startDate, endDate]);
 
-	const prevTGPSFilter = useRef(gpsFilter);
+	const prevFilterRef = useRef({gpsFilter, startDate, endDate});
 	useEffect(() => {
-		if (prevTGPSFilter.current !== gpsFilter) {
-			prevTGPSFilter.current = gpsFilter;
+		const prev = prevFilterRef.current;
+		if (prev.gpsFilter !== gpsFilter || prev.startDate !== startDate || prev.endDate !== endDate) {
+			prevFilterRef.current = {gpsFilter, startDate, endDate};
 			setAlbums([]);
 			void load();
 		}
-	}, [gpsFilter, load]);
+	}, [gpsFilter, startDate, endDate, load]);
 
 	useEffect(() => {
 		return () => {

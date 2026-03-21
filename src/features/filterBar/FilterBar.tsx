@@ -1,32 +1,24 @@
 'use client';
 
-import {useEffect, useRef, useState} from 'react';
+import {useState} from 'react';
 
-import {FILTER_BAR_TRANSITION_CLASS} from '@/features/filterBar/constant';
-import {filterButtonClass, optionButtonClass, toolButtonClass} from '@/features/filterBar/constant';
+import {FILTER_BAR_TRANSITION_CLASS, filterButtonClass, toolButtonClass} from '@/features/filterBar/constant';
+import {DateRangeFilterGroup} from '@/features/filterBar/DateRangeFilterGroup';
 import {FilterIcon} from '@/features/filterBar/FilterIcon';
 import {GPSFilterGroup} from '@/features/filterBar/GPSFilterGroup';
+import {GPXStatusFilterGroup} from '@/features/filterBar/GPXStatusFilterGroup';
 import {HeaderTitle} from '@/features/filterBar/HeaderTitle';
-import {HiddenFilterGroup} from '@/features/filterBar/HiddenFilterGroup';
-import {NumericOptionGroup} from '@/features/filterBar/NumericOptionGroup';
+import {SettingsIcon} from '@/features/filterBar/SettingsIcon';
+import {SettingsPanel} from '@/features/filterBar/SettingsPanel';
+import {useScrollHeight} from '@/features/filterBar/useScrollHeight';
 import {ViewModeGroup} from '@/features/filterBar/ViewModeGroup';
 import {cn} from '@/utils/cn';
-import {
-	GRID_COLUMN_OPTIONS,
-	PAGE_SIZE_ALL,
-	PAGE_SIZE_OPTIONS,
-	buildVisibleMarkerLimitOptions,
-	formatMarkerLimitOption,
-	resolveActiveVisibleMarkerLimit
-} from '@/utils/view';
+import {buildVisibleMarkerLimitOptions, formatMarkerLimitOption, resolveActiveVisibleMarkerLimit} from '@/utils/view';
 
-import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
+import type {TGPSFilter, TGPXStatusFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 import type {ReactElement} from 'react';
 
-/**
- * Props for the main filter bar container.
- */
 type TFilterBarProps = {
 	gpsFilter: TGPSFilter;
 	onGPSFilterAction: (filter: TGPSFilter) => void;
@@ -42,6 +34,9 @@ type TFilterBarProps = {
 	onVisibleMarkerLimitAction: (limit: number) => void;
 	viewMode: TViewMode;
 	onViewModeAction: (mode: TViewMode) => void;
+	startDate: string | null;
+	endDate: string | null;
+	onDateRangeAction: (startDate: string | null, endDate: string | null) => void;
 	isSyncing: boolean;
 	syncError?: string | null;
 	onSyncAction: () => Promise<void>;
@@ -49,41 +44,11 @@ type TFilterBarProps = {
 	onBackAction?: () => void;
 	trailingAction?: ReactElement;
 	hideSettingsOnMobile?: boolean;
+	isGPXActive?: boolean;
+	gpxStatusFilter?: TGPXStatusFilter;
+	onGPXStatusFilterAction?: (filter: TGPXStatusFilter) => void;
 };
 
-function formatPageSizeLabel(option: number): string {
-	if (option === PAGE_SIZE_ALL) {
-		return 'All';
-	}
-	return String(option);
-}
-
-/**
- * Renders the top-level filter toolbar and expandable filter controls.
- *
- * Includes:
- * - current title / back button,
- * - sync trigger,
- * - timeline/album mode toggle,
- * - filter expansion state,
- * - and numeric options for paging/grid settings.
- *
- * @param gpsFilter - Current GPS filter selection.
- * @param onGPSFilterAction - Callback to update GPS filter.
- * @param missingCount - Count used for missing-location badge.
- * @param pageSize - Selected page size.
- * @param onPageSizeAction - Callback to update page size.
- * @param gridColumns - Selected grid column count.
- * @param onGridColumnsAction - Callback to update grid columns.
- * @param viewMode - Active view mode.
- * @param onViewModeAction - Callback to switch view mode.
- * @param isSyncing - Whether sync action is in progress.
- * @param syncError - Optional sync error message.
- * @param onSyncAction - Action to trigger remote sync.
- * @param albumName - Optional album label when focused on an album.
- * @param onBackAction - Optional callback to return to default title context.
- * @returns Filter toolbar and controls.
- */
 export function FilterBar({
 	gpsFilter,
 	onGPSFilterAction,
@@ -99,17 +64,24 @@ export function FilterBar({
 	onVisibleMarkerLimitAction,
 	viewMode,
 	onViewModeAction,
+	startDate,
+	endDate,
+	onDateRangeAction,
 	isSyncing,
 	syncError,
 	onSyncAction,
 	albumName,
 	onBackAction,
 	trailingAction,
-	hideSettingsOnMobile = false
+	hideSettingsOnMobile = false,
+	isGPXActive = false,
+	gpxStatusFilter,
+	onGPXStatusFilterAction
 }: TFilterBarProps): ReactElement {
-	const [isOpen, setIsOpen] = useState(true);
-	const [openPanelHeightPx, setOpenPanelHeightPx] = useState(160);
-	const panelBodyRef = useRef<HTMLDivElement | null>(null);
+	const [isFilterOpen, setIsFilterOpen] = useState(true);
+	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+	const filterPanel = useScrollHeight();
+	const settingsPanel = useScrollHeight();
 	const visibleMarkerLimitOptions = buildVisibleMarkerLimitOptions(visibleMarkerTotalCount);
 	const hasVisibleMarkerLimitOptions = visibleMarkerLimitOptions.length > 0;
 	const activeVisibleMarkerLimit = resolveActiveVisibleMarkerLimit(visibleMarkerLimit, visibleMarkerLimitOptions);
@@ -134,51 +106,46 @@ export function FilterBar({
 		markerMaxLabel = formatMarkerLimitOption(visibleMarkerLimitOptions[visibleMarkerLimitOptions.length - 1]);
 	}
 	const markerMaxText = `max: ${markerMaxLabel}`;
-	const hideSettingsClass = hideSettingsOnMobile ? 'hidden md:inline-flex' : '';
-	const hidePanelOnMobileClass = hideSettingsOnMobile ? 'hidden md:block' : '';
+	let syncTitle = 'Resync with Immich';
+	if (isSyncing) {
+		syncTitle = 'Syncing...';
+	}
+	let hideSettingsClass = '';
+	let hidePanelOnMobileClass = '';
+	if (hideSettingsOnMobile) {
+		hideSettingsClass = 'hidden md:inline-flex';
+		hidePanelOnMobileClass = 'hidden md:block';
+	}
 
-	const onDecreaseVisibleMarkerLimitAction = (): void => {
+	let filterPanelMaxHeight = '0px';
+	let filterPanelOpacity = 0;
+	if (isFilterOpen) {
+		filterPanelMaxHeight = `${filterPanel.heightPx}px`;
+		filterPanelOpacity = 1;
+	}
+
+	let settingsPanelMaxHeight = '0px';
+	let settingsPanelOpacity = 0;
+	if (isSettingsOpen) {
+		settingsPanelMaxHeight = `${settingsPanel.heightPx}px`;
+		settingsPanelOpacity = 1;
+	}
+
+	function onDecreaseVisibleMarkerLimitAction(): void {
 		if (!canDecreaseVisibleMarkerLimit) {
 			return;
 		}
 		const nextLimit = visibleMarkerLimitOptions[activeVisibleMarkerLimitIndex - 1];
 		onVisibleMarkerLimitAction(nextLimit);
-	};
+	}
 
-	const onIncreaseVisibleMarkerLimitAction = (): void => {
+	function onIncreaseVisibleMarkerLimitAction(): void {
 		if (!canIncreaseVisibleMarkerLimit) {
 			return;
 		}
 		const nextLimit = visibleMarkerLimitOptions[activeVisibleMarkerLimitIndex + 1];
 		onVisibleMarkerLimitAction(nextLimit);
-	};
-
-	useEffect(() => {
-		const panelBodyElement = panelBodyRef.current;
-		if (!panelBodyElement) {
-			return;
-		}
-
-		const updatePanelHeight = (): void => {
-			setOpenPanelHeightPx(panelBodyElement.scrollHeight);
-		};
-		updatePanelHeight();
-
-		if (typeof ResizeObserver === 'undefined') {
-			window.addEventListener('resize', updatePanelHeight);
-			return () => {
-				window.removeEventListener('resize', updatePanelHeight);
-			};
-		}
-
-		const observer = new ResizeObserver(() => {
-			updatePanelHeight();
-		});
-		observer.observe(panelBodyElement);
-		return () => {
-			observer.disconnect();
-		};
-	}, []);
+	}
 
 	return (
 		<div className={'border-b border-(--color-border)'}>
@@ -194,14 +161,14 @@ export function FilterBar({
 						void onSyncAction();
 					}}
 					disabled={isSyncing}
-					title={isSyncing ? 'Syncing...' : 'Resync with Immich'}
+					title={syncTitle}
 					className={cn(toolButtonClass, hideSettingsClass, 'disabled:cursor-default disabled:opacity-40')}>
 					<svg
 						width={'12'}
 						height={'12'}
 						viewBox={'0 0 16 16'}
 						fill={'currentColor'}
-						className={isSyncing ? 'animate-spin' : ''}>
+						className={cn(isSyncing && 'animate-spin')}>
 						<path d={'M8 1a7 7 0 0 1 7 7h-1.5A5.5 5.5 0 0 0 8 2.5V1z'} />
 						<path d={'M8 15a7 7 0 0 1-7-7h1.5A5.5 5.5 0 0 0 8 13.5V15z'} />
 						<path d={'M8 1v2.5L10.5 2 8 1z'} />
@@ -209,108 +176,88 @@ export function FilterBar({
 					</svg>
 				</button>
 				<button
-					onClick={() => setIsOpen(value => !value)}
+					onClick={() => {
+						setIsFilterOpen(value => !value);
+						setIsSettingsOpen(false);
+					}}
 					className={cn(
 						filterButtonClass,
 						hideSettingsClass,
-						isOpen && 'bg-(--color-primary) text-white',
-						!isOpen && 'bg-(--color-bg) text-(--color-text-secondary) hover:text-(--color-text)'
+						isFilterOpen && 'bg-(--color-primary) text-white',
+						!isFilterOpen && 'bg-(--color-bg) text-(--color-text-secondary) hover:text-(--color-text)'
 					)}>
 					<FilterIcon />
+				</button>
+				<button
+					onClick={() => {
+						setIsSettingsOpen(value => !value);
+						setIsFilterOpen(false);
+					}}
+					className={cn(
+						filterButtonClass,
+						hideSettingsClass,
+						isSettingsOpen && 'bg-(--color-primary) text-white',
+						!isSettingsOpen && 'bg-(--color-bg) text-(--color-text-secondary) hover:text-(--color-text)'
+					)}>
+					<SettingsIcon />
 				</button>
 				{trailingAction && <div className={'ml-1'}>{trailingAction}</div>}
 			</div>
 			<div
 				className={cn(FILTER_BAR_TRANSITION_CLASS, hidePanelOnMobileClass)}
-				style={{
-					maxHeight: isOpen ? `${openPanelHeightPx}px` : '0px',
-					opacity: isOpen ? 1 : 0
-				}}>
+				style={{maxHeight: filterPanelMaxHeight, opacity: filterPanelOpacity}}>
 				<div
-					ref={panelBodyRef}
+					ref={filterPanel.ref}
 					className={'flex flex-col gap-1.5 px-3 pb-2.5'}>
-					<div className={'flex gap-1.5'}>
-						<GPSFilterGroup
-							gpsFilter={gpsFilter}
-							missingCount={missingCount}
-							onGPSFilterAction={onGPSFilterAction}
+					{isGPXActive && gpxStatusFilter && onGPXStatusFilterAction && (
+						<GPXStatusFilterGroup
+							gpxStatusFilter={gpxStatusFilter}
+							onGPXStatusFilterAction={onGPXStatusFilterAction}
 						/>
-						<ViewModeGroup
-							viewMode={viewMode}
-							onViewModeAction={onViewModeAction}
-						/>
-					</div>
-					<div className={'flex gap-1.5'}>
-						<NumericOptionGroup
-							label={'Per Page'}
-							value={pageSize}
-							options={PAGE_SIZE_OPTIONS}
-							onChangeAction={onPageSizeAction}
-							formatLabel={formatPageSizeLabel}
-						/>
-						<NumericOptionGroup
-							label={'Grid'}
-							value={gridColumns}
-							options={GRID_COLUMN_OPTIONS}
-							onChangeAction={onGridColumnsAction}
-						/>
-					</div>
-					<div className={'flex gap-1.5'}>
-						{hasVisibleMarkerLimitOptions && (
-							<div className={'min-w-0 basis-1/2 rounded-lg bg-(--color-bg) p-2.5'}>
-								<div className={'mb-1 flex items-center justify-between'}>
-									<div
-										className={
-											'text-[0.5625rem] font-semibold uppercase tracking-[0.08em] text-(--color-text-secondary)'
-										}>
-										{'Markers'}
-									</div>
-									<div
-										className={
-											'ml-2 shrink-0 whitespace-nowrap text-[0.5625rem] text-(--color-text-secondary)'
-										}>
-										{markerMaxText}
-									</div>
-								</div>
-								<div className={'flex items-center gap-1'}>
-									<button
-										onClick={onDecreaseVisibleMarkerLimitAction}
-										disabled={!canDecreaseVisibleMarkerLimit}
-										className={cn(
-											optionButtonClass,
-											'px-1.5',
-											'border-(--color-border) bg-transparent text-(--color-text-secondary) hover:border-(--color-text-secondary)',
-											'disabled:cursor-default disabled:opacity-40'
-										)}>
-										{`-${decreaseStepLabel}`}
-									</button>
-									<div
-										className={
-											'min-w-[3.5rem] text-center text-[0.6875rem] font-semibold text-(--color-text)'
-										}>
-										{formatMarkerLimitOption(activeVisibleMarkerLimit)}
-									</div>
-									<button
-										onClick={onIncreaseVisibleMarkerLimitAction}
-										disabled={!canIncreaseVisibleMarkerLimit}
-										className={cn(
-											optionButtonClass,
-											'px-1.5',
-											'border-(--color-border) bg-transparent text-(--color-text-secondary) hover:border-(--color-text-secondary)',
-											'disabled:cursor-default disabled:opacity-40'
-										)}>
-										{`+${increaseStepLabel}`}
-									</button>
-								</div>
+					)}
+					{!isGPXActive && (
+						<>
+							<div className={'flex gap-1.5'}>
+								<GPSFilterGroup
+									gpsFilter={gpsFilter}
+									missingCount={missingCount}
+									onGPSFilterAction={onGPSFilterAction}
+								/>
+								<ViewModeGroup
+									viewMode={viewMode}
+									onViewModeAction={onViewModeAction}
+								/>
 							</div>
-						)}
-						<div className={cn('min-w-0', hasVisibleMarkerLimitOptions ? 'basis-1/2' : 'flex-1')}>
-							<HiddenFilterGroup
-								hiddenFilter={hiddenFilter}
-								onHiddenFilterAction={onHiddenFilterAction}
+							<DateRangeFilterGroup
+								startDate={startDate}
+								endDate={endDate}
+								onDateRangeAction={onDateRangeAction}
 							/>
-						</div>
-					</div>
+						</>
+					)}
+				</div>
+			</div>
+			<div
+				className={cn(FILTER_BAR_TRANSITION_CLASS, hidePanelOnMobileClass)}
+				style={{maxHeight: settingsPanelMaxHeight, opacity: settingsPanelOpacity}}>
+				<div ref={settingsPanel.ref}>
+					<SettingsPanel
+						pageSize={pageSize}
+						onPageSizeAction={onPageSizeAction}
+						gridColumns={gridColumns}
+						onGridColumnsAction={onGridColumnsAction}
+						hiddenFilter={hiddenFilter}
+						onHiddenFilterAction={onHiddenFilterAction}
+						activeVisibleMarkerLimit={activeVisibleMarkerLimit}
+						hasVisibleMarkerLimitOptions={hasVisibleMarkerLimitOptions}
+						canDecreaseVisibleMarkerLimit={canDecreaseVisibleMarkerLimit}
+						canIncreaseVisibleMarkerLimit={canIncreaseVisibleMarkerLimit}
+						decreaseStepLabel={decreaseStepLabel}
+						increaseStepLabel={increaseStepLabel}
+						markerMaxText={markerMaxText}
+						onDecreaseVisibleMarkerLimitAction={onDecreaseVisibleMarkerLimitAction}
+						onIncreaseVisibleMarkerLimitAction={onIncreaseVisibleMarkerLimitAction}
+					/>
 				</div>
 			</div>
 			{syncError && <div className={'px-3 pb-2 text-[0.6875rem] text-[#b91c1c]'}>{syncError}</div>}

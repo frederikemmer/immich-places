@@ -76,19 +76,31 @@ func (d *Database) replaceAlbumAssets(ctx context.Context, userID, albumID strin
 	return tx.Commit()
 }
 
-func (d *Database) getAlbumsWithNoGPSCount(ctx context.Context, userID string) ([]AlbumRow, error) {
+func (d *Database) getAlbumsWithNoGPSCount(ctx context.Context, userID, startDate, endDate string) ([]AlbumRow, error) {
+	dateFilter := ""
+	var args []interface{}
+	if startDate != "" {
+		dateFilter += ` AND ast.dateTimeOriginal >= ?`
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		dateFilter += ` AND ast.dateTimeOriginal < ?`
+		args = append(args, endDate+"T99")
+	}
+	args = append(args, userID)
+
 	rows, err := d.db.QueryContext(ctx,
 		`SELECT a.immichID, a.albumName, a.thumbnailAssetID, a.assetCount, a.updatedAt, a.startDate,
 			COUNT(CASE WHEN ast.immichID IS NOT NULL
 				AND (ast.latitude IS NULL OR ast.longitude IS NULL)
-				AND ast.stackPrimaryAssetID IS NULL`+hiddenLibraryFilterAliasedAST+` THEN 1 END) as filteredCount
+				AND ast.stackPrimaryAssetID IS NULL`+hiddenLibraryFilterAliasedAST+dateFilter+` THEN 1 END) as filteredCount
 		FROM albums a
 		LEFT JOIN albumAssets aa ON aa.userID = a.userID AND aa.albumID = a.immichID
 		LEFT JOIN assets ast ON ast.userID = a.userID AND ast.immichID = aa.assetID
 		WHERE a.userID = ?
 		GROUP BY a.immichID
 		ORDER BY a.startDate DESC`,
-		userID,
+		args...,
 	)
 	if err != nil {
 		return nil, err
@@ -107,13 +119,28 @@ func (d *Database) getAlbumsWithNoGPSCount(ctx context.Context, userID string) (
 	return albums, rows.Err()
 }
 
-func (d *Database) getAlbumsWithGPSCount(ctx context.Context, userID string) ([]AlbumRow, error) {
+func (d *Database) getAlbumsWithGPSCount(ctx context.Context, userID, startDate, endDate string) ([]AlbumRow, error) {
+	dateFilter := ""
+	var dateArgs []interface{}
+	if startDate != "" {
+		dateFilter += ` AND ast.dateTimeOriginal >= ?`
+		dateArgs = append(dateArgs, startDate)
+	}
+	if endDate != "" {
+		dateFilter += ` AND ast.dateTimeOriginal < ?`
+		dateArgs = append(dateArgs, endDate+"T99")
+	}
+	var args []interface{}
+	args = append(args, dateArgs...)
+	args = append(args, dateArgs...)
+	args = append(args, userID)
+
 	rows, err := d.db.QueryContext(ctx,
 		`SELECT a.immichID, a.albumName, a.thumbnailAssetID, a.assetCount, a.updatedAt, a.startDate,
 			COUNT(CASE WHEN ast.latitude IS NOT NULL AND ast.longitude IS NOT NULL
-				AND ast.stackPrimaryAssetID IS NULL`+hiddenLibraryFilterAliasedAST+` THEN 1 END) as filteredCount,
+				AND ast.stackPrimaryAssetID IS NULL`+hiddenLibraryFilterAliasedAST+dateFilter+` THEN 1 END) as filteredCount,
 			COUNT(CASE WHEN (ast.latitude IS NULL OR ast.longitude IS NULL)
-				AND ast.stackPrimaryAssetID IS NULL`+hiddenLibraryFilterAliasedAST+` THEN 1 END) as noGPSCount
+				AND ast.stackPrimaryAssetID IS NULL`+hiddenLibraryFilterAliasedAST+dateFilter+` THEN 1 END) as noGPSCount
 		FROM albums a
 		JOIN albumAssets aa ON aa.userID = a.userID AND aa.albumID = a.immichID
 		JOIN assets ast ON ast.userID = a.userID AND ast.immichID = aa.assetID
@@ -121,7 +148,7 @@ func (d *Database) getAlbumsWithGPSCount(ctx context.Context, userID string) ([]
 		GROUP BY a.immichID
 		HAVING filteredCount > 0
 		ORDER BY a.startDate DESC`,
-		userID,
+		args...,
 	)
 	if err != nil {
 		return nil, err

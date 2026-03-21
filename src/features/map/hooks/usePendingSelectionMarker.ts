@@ -123,7 +123,7 @@ export function usePendingSelectionMarker({
 		const existingMarkerPosition = markerRef.current?.getLatLng() ?? null;
 		clearMarker(markerRef);
 
-		if (pendingLocation && pendingLocation.source === MAP_LOCATION_SOURCE_GO_TO) {
+		if (pendingLocation?.source === MAP_LOCATION_SOURCE_GO_TO) {
 			const zoom = resolvePendingZoom(map, pendingLocation.source);
 			programmaticMoveRef.current = true;
 			map.flyTo([pendingLocation.latitude, pendingLocation.longitude], zoom, {

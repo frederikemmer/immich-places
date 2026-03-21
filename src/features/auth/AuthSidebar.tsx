@@ -6,7 +6,6 @@ import {useEffect, useState} from 'react';
 import {APIKeySetup} from '@/features/auth/APIKeySetup';
 import {getAuthStatus} from '@/features/auth/authApi';
 import {useAuth} from '@/features/auth/AuthContext';
-import {getErrorMessage} from '@/utils/error';
 import {AUTH_INPUT_CLASS, MINIMUM_PASSWORD_LENGTH} from '@/features/auth/constant';
 
 import type {ChangeEvent, InputHTMLAttributes, ReactElement, ReactNode} from 'react';
@@ -44,7 +43,7 @@ export function AuthSidebar(): ReactElement {
 function AuthForms(): ReactElement {
 	const [view, setView] = useState<TAuthView>('login');
 	const [isRegistrationEnabled, setIsRegistrationEnabled] = useState(false);
-	const [authStatusError, setAuthStatusError] = useState<string | null>(null);
+	const [statusError, setStatusError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const controller = new AbortController();
@@ -53,15 +52,16 @@ function AuthForms(): ReactElement {
 				if (controller.signal.aborted) {
 					return;
 				}
+				setStatusError(null);
 				setIsRegistrationEnabled(status.registrationEnabled);
-				setAuthStatusError(null);
 			})
-			.catch(error => {
+			.catch((error: unknown) => {
 				if (controller.signal.aborted) {
 					return;
 				}
 				setIsRegistrationEnabled(false);
-				setAuthStatusError(getErrorMessage(error, 'Failed to load auth status'));
+				const message = error instanceof Error ? error.message : 'Failed to reach the server';
+				setStatusError(message);
 			});
 
 		return () => {
@@ -77,7 +77,7 @@ function AuthForms(): ReactElement {
 		<LoginForm
 			onSwitchToRegisterAction={() => setView('register')}
 			registrationEnabled={isRegistrationEnabled}
-			authStatusError={authStatusError}
+			statusError={statusError}
 		/>
 	);
 }
@@ -87,21 +87,19 @@ function AuthForms(): ReactElement {
  *
  * @param onSwitchToRegisterAction - Shows registration form when invoked.
  * @param registrationEnabled - Whether registration is currently supported by the backend.
- * @param authStatusError - Optional backend status error to surface under submit controls.
  * @returns Rendered login form.
  */
 function LoginForm({
 	onSwitchToRegisterAction,
-	registrationEnabled
+	registrationEnabled,
+	statusError
 }: {
 	onSwitchToRegisterAction: () => void;
 	registrationEnabled: boolean;
-	authStatusError: string | null;
+	statusError: string | null;
 }): ReactElement {
 	const {login, error} = useAuth();
-	const [email, setEmail] = useState(() => {
-		return '';
-	});
+	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -136,6 +134,7 @@ function LoginForm({
 					required
 					autoComplete={'current-password'}
 				/>
+				{statusError && <p className={'text-sm text-amber-600 text-center'}>{statusError}</p>}
 				{error && <p className={'text-sm text-red-600 text-center'}>{error}</p>}
 				<button
 					type={'submit'}
@@ -143,7 +142,8 @@ function LoginForm({
 					className={
 						'cursor-pointer rounded-lg border-0 bg-(--color-primary) py-2 text-sm font-medium text-white disabled:opacity-50'
 					}>
-					{isSubmitting ? 'Signing in...' : 'Sign in'}
+					{isSubmitting && 'Signing in...'}
+					{!isSubmitting && 'Sign in'}
 				</button>
 				<button
 					type={'button'}
@@ -229,7 +229,8 @@ function RegisterForm({onSwitchToLoginAction}: {onSwitchToLoginAction: () => voi
 					className={
 						'cursor-pointer rounded-lg border-0 bg-(--color-primary) py-2 text-sm font-medium text-white disabled:opacity-50'
 					}>
-					{isSubmitting ? 'Creating account...' : 'Create account'}
+					{isSubmitting && 'Creating account...'}
+					{!isSubmitting && 'Create account'}
 				</button>
 				<button
 					type={'button'}

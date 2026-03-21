@@ -19,6 +19,25 @@ func (d *Database) decryptUserAPIKey(u *UserRow) error {
 	return nil
 }
 
+func (d *Database) decryptDawarichAPIKey(u *UserRow) error {
+	if u.DawarichAPIKey == nil {
+		return nil
+	}
+	plaintext, err := decryptValue(d.encryptionKey, *u.DawarichAPIKey)
+	if err != nil {
+		return fmt.Errorf("decrypt Dawarich API key for user %s: %w", u.ID, err)
+	}
+	u.DawarichAPIKey = &plaintext
+	return nil
+}
+
+func (d *Database) decryptUserSecrets(u *UserRow) error {
+	if err := d.decryptUserAPIKey(u); err != nil {
+		return err
+	}
+	return d.decryptDawarichAPIKey(u)
+}
+
 func (d *Database) createUser(ctx context.Context, ID, email, passwordHash string) error {
 	_, err := d.db.ExecContext(ctx,
 		`INSERT INTO users (ID, email, passwordHash) VALUES (?, ?, ?)`,
@@ -29,18 +48,18 @@ func (d *Database) createUser(ctx context.Context, ID, email, passwordHash strin
 
 func (d *Database) getUserByEmail(ctx context.Context, email string) (*UserRow, error) {
 	row := d.db.QueryRowContext(ctx,
-		`SELECT ID, email, passwordHash, immichAPIKey, createdAt, updatedAt FROM users WHERE email = ?`,
+		`SELECT ID, email, passwordHash, immichAPIKey, dawarichAPIKey, createdAt, updatedAt FROM users WHERE email = ?`,
 		email,
 	)
 	var u UserRow
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.ImmichAPIKey, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.ImmichAPIKey, &u.DawarichAPIKey, &u.CreatedAt, &u.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if err := d.decryptUserAPIKey(&u); err != nil {
+	if err := d.decryptUserSecrets(&u); err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -48,18 +67,18 @@ func (d *Database) getUserByEmail(ctx context.Context, email string) (*UserRow, 
 
 func (d *Database) getUserByID(ctx context.Context, ID string) (*UserRow, error) {
 	row := d.db.QueryRowContext(ctx,
-		`SELECT ID, email, passwordHash, immichAPIKey, createdAt, updatedAt FROM users WHERE ID = ?`,
+		`SELECT ID, email, passwordHash, immichAPIKey, dawarichAPIKey, createdAt, updatedAt FROM users WHERE ID = ?`,
 		ID,
 	)
 	var u UserRow
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.ImmichAPIKey, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.ImmichAPIKey, &u.DawarichAPIKey, &u.CreatedAt, &u.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if err := d.decryptUserAPIKey(&u); err != nil {
+	if err := d.decryptUserSecrets(&u); err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -89,7 +108,7 @@ func (d *Database) countUsers(ctx context.Context) (int, error) {
 
 func (d *Database) getUsersWithAPIKeys(ctx context.Context) ([]UserRow, error) {
 	rows, err := d.db.QueryContext(ctx,
-		`SELECT ID, email, passwordHash, immichAPIKey, createdAt, updatedAt FROM users WHERE immichAPIKey IS NOT NULL`,
+		`SELECT ID, email, passwordHash, immichAPIKey, dawarichAPIKey, createdAt, updatedAt FROM users WHERE immichAPIKey IS NOT NULL`,
 	)
 	if err != nil {
 		return nil, err
@@ -99,10 +118,10 @@ func (d *Database) getUsersWithAPIKeys(ctx context.Context) ([]UserRow, error) {
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.ImmichAPIKey, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.ImmichAPIKey, &u.DawarichAPIKey, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
-		if err := d.decryptUserAPIKey(&u); err != nil {
+		if err := d.decryptUserSecrets(&u); err != nil {
 			return nil, err
 		}
 		users = append(users, u)
@@ -120,21 +139,21 @@ func (d *Database) createSession(ctx context.Context, tokenHash, userID string, 
 
 func (d *Database) getSessionUser(ctx context.Context, tokenHash string) (*UserRow, error) {
 	row := d.db.QueryRowContext(ctx,
-		`SELECT u.ID, u.email, u.passwordHash, u.immichAPIKey, u.createdAt, u.updatedAt
+		`SELECT u.ID, u.email, u.passwordHash, u.immichAPIKey, u.dawarichAPIKey, u.createdAt, u.updatedAt
 		FROM sessions s
 		JOIN users u ON u.ID = s.userID
 		WHERE s.tokenHash = ? AND s.expiresAt > datetime('now')`,
 		tokenHash,
 	)
 	var u UserRow
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.ImmichAPIKey, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.ImmichAPIKey, &u.DawarichAPIKey, &u.CreatedAt, &u.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if err := d.decryptUserAPIKey(&u); err != nil {
+	if err := d.decryptUserSecrets(&u); err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -152,6 +171,22 @@ func (d *Database) deleteUserSessions(ctx context.Context, userID string) error 
 
 func (d *Database) deleteExpiredSessions(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, `DELETE FROM sessions WHERE expiresAt <= datetime('now')`)
+	return err
+}
+
+func (d *Database) updateDawarichAPIKey(ctx context.Context, userID string, apiKey *string) error {
+	var storedKey *string
+	if apiKey != nil {
+		encrypted, err := encryptValue(d.encryptionKey, *apiKey)
+		if err != nil {
+			return fmt.Errorf("encrypt Dawarich API key: %w", err)
+		}
+		storedKey = &encrypted
+	}
+	_, err := d.db.ExecContext(ctx,
+		`UPDATE users SET dawarichAPIKey = ?, updatedAt = datetime('now') WHERE ID = ?`,
+		storedKey, userID,
+	)
 	return err
 }
 

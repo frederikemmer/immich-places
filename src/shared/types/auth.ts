@@ -7,6 +7,7 @@ export type TAuthUser = {
 export type TMeResponse = {
 	user: TAuthUser;
 	hasImmichAPIKey: boolean;
+	hasDawarichCredentials: boolean;
 	hasLibraries: boolean;
 	mapMarkerCount: number;
 };

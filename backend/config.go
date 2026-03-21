@@ -18,7 +18,11 @@ type Config struct {
 	AllowInsecure       bool   `env:"ALLOW_INSECURE" envDefault:"false"`
 	RegistrationEnabled bool   `env:"REGISTRATION_ENABLED" envDefault:"true"`
 	EncryptionKey       string `env:"ENCRYPTION_KEY,notEmpty"`
+	DawarichURL         string `env:"DAWARICH_URL"`
 	DefaultTimezone     string `env:"DEFAULT_TIMEZONE"`
+	GeocodeProvider    string `env:"GEOCODE_PROVIDER" envDefault:"nominatim"`
+	GeocodeAPIKey      string `env:"GEOCODE_API_KEY"`
+	GeocodeTimeoutSecs int    `env:"GEOCODE_TIMEOUT" envDefault:"10"`
 
 	defaultTimezoneLocation *time.Location
 }
@@ -37,6 +41,10 @@ func loadConfig() (*Config, error) {
 
 	if cfg.SyncIntervalMS <= 0 {
 		return nil, fmt.Errorf("SYNC_INTERVAL_MS must be > 0, got %d", cfg.SyncIntervalMS)
+	}
+
+	if cfg.GeocodeTimeoutSecs <= 0 {
+		return nil, fmt.Errorf("GEOCODE_TIMEOUT must be > 0, got %d", cfg.GeocodeTimeoutSecs)
 	}
 
 	if !cfg.TrustProxyTLS && !cfg.AllowInsecure {

@@ -8,12 +8,17 @@ export type TGPSFilter = 'no-gps' | 'with-gps';
 
 export type THiddenFilter = 'all' | 'hidden' | 'visible';
 
+export type TGPXStatusFilter = 'all' | 'alreadySet' | 'new' | 'edited';
+
 export type TPendingLocation = {
 	latitude: number;
 	longitude: number;
 	source: 'map-click' | 'search' | 'suggestion' | 'drag-drop' | 'marker-drag' | 'gpx-import' | 'go-to';
 	sourceLabel?: string;
 	isAlreadyApplied?: boolean;
+	hasExistingLocation?: boolean;
+	originalLatitude?: number;
+	originalLongitude?: number;
 };
 
 export type TPendingLocationsByAssetID = Record<string, TPendingLocation>;
@@ -26,6 +31,9 @@ export type TSetLocationOptions = {
 	shouldSkipPendingLocation?: boolean;
 	sourceLabel?: string;
 	isAlreadyApplied?: boolean;
+	hasExistingLocation?: boolean;
+	originalLatitude?: number;
+	originalLongitude?: number;
 };
 
 export type TMapContextMenuCluster = {
@@ -42,6 +50,9 @@ export type TMapContextMenuMarker = {
 	x: number;
 	y: number;
 	assetID: string;
+	canResetPosition?: boolean;
+	originalLatitude?: number;
+	originalLongitude?: number;
 };
 
 export type TMapContextMenuState = TMapContextMenuCluster | TMapContextMenuMarker | null;

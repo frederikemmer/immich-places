@@ -10,8 +10,7 @@ import {PHOTO_GRID_FADE_ANIMATION} from '@/utils/photoGrid';
 import type {TGPXPreviewResponse} from '@/features/gpxImport/gpxImportTypes';
 import type {TAlbumRow} from '@/shared/types/album';
 import type {TAssetRow} from '@/shared/types/asset';
-import type {THealthResponse} from '@/shared/types/health';
-import type {TGPSFilter, THiddenFilter} from '@/shared/types/map';
+import type {TGPSFilter, TGPXStatusFilter, THiddenFilter} from '@/shared/types/map';
 import type {TViewMode} from '@/shared/types/view';
 import type {CSSProperties, ReactElement} from 'react';
 
@@ -21,7 +20,6 @@ const contentClass = 'flex min-h-0 flex-1 flex-col';
 
 type TPhotoListProps = {
 	backend: {
-		health: THealthResponse | null;
 		isSyncing: boolean;
 		syncError: string | null;
 		onResyncAction: () => Promise<void>;
@@ -44,14 +42,18 @@ type TPhotoListProps = {
 		onVisibleMarkerLimitAction: (limit: number) => void;
 		onViewModeAction: (mode: TViewMode) => void;
 		onBackToAlbumsAction: () => void;
+		startDate: string | null;
+		endDate: string | null;
+		onDateRangeAction: (startDate: string | null, endDate: string | null) => void;
 		gpxPreviews: TGPXPreviewResponse[];
 		gpxError: string | null;
 		onGPXResetAction: () => void;
 		onGPXCancelAction: () => void;
 		trailingAction?: ReactElement;
+		gpxStatusFilter: TGPXStatusFilter;
+		onGPXStatusFilterAction: (filter: TGPXStatusFilter) => void;
 	};
 	catalog: {
-		albums: TAlbumRow[];
 		assets: TAssetRow[];
 		total: number;
 		currentPage: number;
@@ -92,7 +94,7 @@ function buildContentKey(
 }
 
 export function PhotoList({backend, view, catalog, selection}: TPhotoListProps): ReactElement {
-	const {health, isSyncing, syncError} = backend;
+	const {isSyncing, syncError} = backend;
 	const {
 		gpsFilter,
 		hiddenFilter,
@@ -110,13 +112,17 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 		onVisibleMarkerLimitAction,
 		onViewModeAction,
 		onBackToAlbumsAction,
+		startDate,
+		endDate,
+		onDateRangeAction,
 		gpxPreviews,
 		gpxError,
 		onGPXResetAction,
-		onGPXCancelAction
+		onGPXCancelAction,
+		gpxStatusFilter,
+		onGPXStatusFilterAction
 	} = view;
 	const {
-		albums,
 		assets,
 		total,
 		currentPage,
@@ -131,13 +137,6 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 	const shouldShowAlbumList = viewMode === 'album' && !selectedAlbumID;
 	const shouldShowAlbumDetail = viewMode === 'album' && Boolean(selectedAlbumID) && selectedAlbum !== null;
 
-	const albumViewMissingCount = albums.reduce((sum, album) => sum + album.noGPSCount, 0);
-	const globalMissingCount = albums.length > 0 ? albumViewMissingCount : (health?.noGPSAssets ?? null);
-	const effectiveMissingCount = selectedAlbum
-		? selectedAlbum.noGPSCount
-		: selectedAlbumID
-			? null
-			: globalMissingCount;
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 	const contentKey = buildContentKey(shouldShowAlbumList, shouldShowAlbumDetail, viewMode, selectedAlbumID);
 	let scrollResetKey = `${viewMode}:${currentPage}`;
@@ -146,10 +145,18 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 	}
 
 	const isGPXActive = gpxPreviews.length > 0;
+	let mobileMaxVisibleRows: number | null = null;
+	if (shouldShowAlbumDetail) {
+		mobileMaxVisibleRows = 1.8;
+	}
 	let effectiveAlbumName = selectedAlbum?.albumName;
 	let effectiveBackAction = onBackToAlbumsAction;
 	if (isGPXActive) {
-		effectiveAlbumName = gpxPreviews.length > 1 ? `GPX Import (${gpxPreviews.length} tracks)` : 'GPX Import';
+		if (gpxPreviews.length > 1) {
+			effectiveAlbumName = `GPX Import (${gpxPreviews.length} tracks)`;
+		} else {
+			effectiveAlbumName = 'GPX Import';
+		}
 		effectiveBackAction = onGPXCancelAction;
 	}
 
@@ -160,7 +167,7 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 				onGPSFilterAction={onGPSFilterAction}
 				hiddenFilter={hiddenFilter}
 				onHiddenFilterAction={onHiddenFilterAction}
-				missingCount={effectiveMissingCount}
+				missingCount={view.missingCount}
 				pageSize={pageSize}
 				onPageSizeAction={onPageSizeAction}
 				gridColumns={gridColumns}
@@ -170,6 +177,9 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 				onVisibleMarkerLimitAction={onVisibleMarkerLimitAction}
 				viewMode={viewMode}
 				onViewModeAction={onViewModeAction}
+				startDate={startDate}
+				endDate={endDate}
+				onDateRangeAction={onDateRangeAction}
 				isSyncing={isSyncing}
 				syncError={syncError}
 				onSyncAction={onRetrySyncAction}
@@ -177,6 +187,9 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 				onBackAction={effectiveBackAction}
 				trailingAction={view.trailingAction}
 				hideSettingsOnMobile={shouldShowAlbumDetail}
+				isGPXActive={isGPXActive}
+				gpxStatusFilter={gpxStatusFilter}
+				onGPXStatusFilterAction={onGPXStatusFilterAction}
 			/>
 			{isGPXActive && (
 				<GPXImportPanel
@@ -209,7 +222,7 @@ export function PhotoList({backend, view, catalog, selection}: TPhotoListProps):
 							isLoading={isLoadingAssets}
 							isSyncing={isSyncing}
 							error={assetsError}
-							mobileMaxVisibleRows={shouldShowAlbumDetail ? 1.8 : null}
+							mobileMaxVisibleRows={mobileMaxVisibleRows}
 						/>
 					)}
 					{!shouldShowAlbumList && total > 0 && (

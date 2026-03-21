@@ -13,8 +13,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const maxGeocodeCacheSize = 10000
-
 type NominatimClient struct {
 	httpClient *http.Client
 	cache      map[string]string
@@ -22,15 +20,15 @@ type NominatimClient struct {
 	limiter    *rate.Limiter
 }
 
-func newNominatimClient() *NominatimClient {
+func newNominatimClient(timeout time.Duration) *NominatimClient {
 	return &NominatimClient{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{Timeout: timeout},
 		cache:      make(map[string]string),
 		limiter:    rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 }
 
-func (n *NominatimClient) reverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+func (n *NominatimClient) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
 	key := fmt.Sprintf("%.2f,%.2f", lat, lon)
 
 	n.cacheMu.Lock()
@@ -41,7 +39,7 @@ func (n *NominatimClient) reverseGeocode(ctx context.Context, lat, lon float64) 
 	n.cacheMu.Unlock()
 
 	if err := n.limiter.Wait(ctx); err != nil {
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("Nominatim rate limiter: %w", err)
 	}
 
 	url := fmt.Sprintf(
@@ -51,14 +49,14 @@ func (n *NominatimClient) reverseGeocode(ctx context.Context, lat, lon float64) 
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("Nominatim request build: %w", err)
 	}
 	req.Header.Set("User-Agent", "ImmichPlaces/1.0")
 	req.Header.Set("Accept-Language", "en")
 
 	resp, err := n.httpClient.Do(req)
 	if err != nil {
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("Nominatim request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -67,18 +65,28 @@ func (n *NominatimClient) reverseGeocode(ctx context.Context, lat, lon float64) 
 			if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
 				n.limiter.SetLimit(rate.Every(time.Duration(seconds) * time.Second))
 				log.Printf("Nominatim rate limited, adjusting to 1 request per %ds", seconds)
+				go func() {
+					time.Sleep(time.Duration(seconds) * time.Second)
+					n.limiter.SetLimit(rate.Every(time.Second))
+					log.Println("Nominatim rate limiter reset to 1 req/s")
+				}()
 			} else if t, err := http.ParseTime(retryAfter); err == nil {
 				delay := time.Until(t)
 				if delay > 0 {
 					n.limiter.SetLimit(rate.Every(delay))
 					log.Printf("Nominatim rate limited, adjusting to 1 request per %v", delay.Round(time.Second))
+					go func() {
+						time.Sleep(delay)
+						n.limiter.SetLimit(rate.Every(time.Second))
+						log.Println("Nominatim rate limiter reset to 1 req/s")
+					}()
 				}
 			}
 		}
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("Nominatim rate limited (429)")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("Nominatim returned status %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -92,7 +100,7 @@ func (n *NominatimClient) reverseGeocode(ctx context.Context, lat, lon float64) 
 		} `json:"address"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("Nominatim response decode: %w", err)
 	}
 
 	label := buildLabel(result.Address.City, result.Address.Town, result.Address.Village, result.Address.State, result.Address.Country)

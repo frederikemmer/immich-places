@@ -2,8 +2,13 @@
 
 import {useEffect, useMemo, useRef} from 'react';
 
+import {errorBannerClass} from '@/features/gpxImport/constant';
 import {PhotoGrid} from '@/features/photoGrid/PhotoGrid';
-import {deriveAlreadyAppliedIDs} from '@/features/selection/selectionStateHelpers';
+import {
+	deriveAlreadyAppliedIDs,
+	hasGPXPendingEntries,
+	matchesGPXStatusFilter
+} from '@/features/selection/selectionStateHelpers';
 import {useSelection, useView} from '@/shared/context/AppContext';
 
 import type {TGPXMatchResult, TGPXPreviewResponse} from '@/features/gpxImport/gpxImportTypes';
@@ -35,8 +40,14 @@ function mergeAndDeduplicateMatches(previews: TGPXPreviewResponse[]): TGPXMatchR
 
 export function GPXImportPanel({previews, error, onReset}: TGPXImportPanelProps): ReactElement {
 	const {gridColumns, gpsFilter} = useView();
-	const {selectedAssets, setLocationAction, pendingLocationsByAssetID, beginLocationBatch, endLocationBatch} =
-		useSelection();
+	const {
+		selectedAssets,
+		setLocationAction,
+		pendingLocationsByAssetID,
+		beginLocationBatch,
+		endLocationBatch,
+		gpxStatusFilter
+	} = useSelection();
 
 	const selectedIDs = useMemo(() => new Set(selectedAssets.map(a => a.immichID)), [selectedAssets]);
 	const alreadyAppliedIDs = useMemo(
@@ -46,9 +57,15 @@ export function GPXImportPanel({previews, error, onReset}: TGPXImportPanelProps)
 
 	const mergedMatches = useMemo(() => mergeAndDeduplicateMatches(previews), [previews]);
 
+	const filteredMatches = useMemo(() => {
+		return mergedMatches.filter(m =>
+			matchesGPXStatusFilter(gpxStatusFilter, m.isAlreadyApplied, m.hasExistingLocation)
+		);
+	}, [mergedMatches, gpxStatusFilter]);
+
 	const gpxAssets = useMemo<TAssetRow[]>(
 		() =>
-			mergedMatches.map(match => ({
+			filteredMatches.map(match => ({
 				immichID: match.assetID,
 				type: 'IMAGE',
 				originalFileName: match.fileName,
@@ -62,13 +79,8 @@ export function GPXImportPanel({previews, error, onReset}: TGPXImportPanelProps)
 				syncedAt: '',
 				isHidden: false
 			})),
-		[mergedMatches]
+		[filteredMatches]
 	);
-
-	const detectedTimezones = useMemo(() => {
-		const unique = new Set(previews.map(p => p.detectedTimezone).filter(Boolean));
-		return Array.from(unique);
-	}, [previews]);
 
 	useEffect(() => {
 		if (mergedMatches.length === 0) {
@@ -84,7 +96,10 @@ export function GPXImportPanel({previews, error, onReset}: TGPXImportPanelProps)
 					targetAssetIDs: [match.assetID],
 					shouldSkipPendingLocation: true,
 					sourceLabel: match.trackName || '',
-					isAlreadyApplied: match.isAlreadyApplied
+					isAlreadyApplied: match.isAlreadyApplied,
+					hasExistingLocation: match.hasExistingLocation,
+					originalLatitude: match.existingLatitude,
+					originalLongitude: match.existingLongitude
 				});
 			}
 		} finally {
@@ -92,37 +107,27 @@ export function GPXImportPanel({previews, error, onReset}: TGPXImportPanelProps)
 		}
 	}, [mergedMatches, setLocationAction, beginLocationBatch, endLocationBatch]);
 
-	const hasGPXPendingEntries = useMemo(
-		() => Object.values(pendingLocationsByAssetID).some(loc => loc.source === 'gpx-import'),
-		[pendingLocationsByAssetID]
-	);
+	const hasGPXEntries = useMemo(() => hasGPXPendingEntries(pendingLocationsByAssetID), [pendingLocationsByAssetID]);
 	const hadGPXEntriesRef = useRef(false);
-	if (hasGPXPendingEntries) {
+	if (hasGPXEntries) {
 		hadGPXEntriesRef.current = true;
 	}
 	useEffect(() => {
-		if (hadGPXEntriesRef.current && !hasGPXPendingEntries) {
+		if (hadGPXEntriesRef.current && !hasGPXEntries) {
 			hadGPXEntriesRef.current = false;
 			onReset();
 		}
-	}, [hasGPXPendingEntries, onReset]);
+	}, [hasGPXEntries, onReset]);
 
 	return (
 		<div className={'flex min-h-0 flex-1 flex-col'}>
-			{detectedTimezones.length > 0 && (
-				<div className={'mx-3 mt-2 text-[0.625rem] text-(--color-text-secondary)'}>
-					{`Timezone: ${detectedTimezones.join(', ')}`}
-				</div>
-			)}
-			{error && (
-				<div className={'mx-3 mt-3 rounded-lg bg-[#fef2f2] px-3 py-2 text-xs text-[#b91c1c]'}>{error}</div>
-			)}
-			{mergedMatches.length === 0 && (
+			{error && <div className={`mx-3 mt-3 ${errorBannerClass}`}>{error}</div>}
+			{filteredMatches.length === 0 && (
 				<p className={'py-4 text-center text-xs text-(--color-text-secondary)'}>
 					{'No photos matched. Try importing again with different settings.'}
 				</p>
 			)}
-			{mergedMatches.length > 0 && (
+			{filteredMatches.length > 0 && (
 				<PhotoGrid
 					assets={gpxAssets}
 					selectedIDs={selectedIDs}

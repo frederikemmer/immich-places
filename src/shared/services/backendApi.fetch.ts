@@ -1,4 +1,5 @@
 import {DEFAULT_BACKEND_REQUEST_TIMEOUT_MS} from '@/utils/request';
+import {isRecord, isString} from '@/utils/typeGuards';
 
 import type {TRequestOptions} from '@/shared/types/api';
 
@@ -26,6 +27,22 @@ export async function parseJSON<T>(
 		throw new Error(errorMessage);
 	}
 	return value;
+}
+
+export async function throwIfErrorResponse(response: Response, fallbackPrefix: string): Promise<void> {
+	if (response.ok) {
+		return;
+	}
+	let errorMessage: string | null = null;
+	try {
+		const payload: unknown = await response.json();
+		if (isRecord(payload) && isString(payload.error) && payload.error.trim().length > 0) {
+			errorMessage = payload.error;
+		}
+	} catch {
+		// ignore parse failures
+	}
+	throw new Error(errorMessage ?? `${fallbackPrefix} (${response.status})`);
 }
 
 /**

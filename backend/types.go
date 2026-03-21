@@ -163,12 +163,13 @@ type TViewportBounds struct {
 }
 
 type UserRow struct {
-	ID           string  `json:"ID"`
-	Email        string  `json:"email"`
-	PasswordHash string  `json:"-"`
-	ImmichAPIKey *string `json:"-"`
-	CreatedAt    string  `json:"createdAt"`
-	UpdatedAt    string  `json:"updatedAt"`
+	ID              string  `json:"ID"`
+	Email           string  `json:"email"`
+	PasswordHash    string  `json:"-"`
+	ImmichAPIKey    *string `json:"-"`
+	DawarichAPIKey  *string `json:"-"`
+	CreatedAt       string  `json:"createdAt"`
+	UpdatedAt       string  `json:"updatedAt"`
 }
 
 type RegisterRequest struct {
@@ -186,10 +187,11 @@ type UpdateAPIKeyRequest struct {
 }
 
 type TMeResponse struct {
-	User            UserRow `json:"user"`
-	HasImmichAPIKey bool    `json:"hasImmichAPIKey"`
-	HasLibraries    bool    `json:"hasLibraries"`
-	MapMarkerCount  int     `json:"mapMarkerCount"`
+	User                   UserRow `json:"user"`
+	HasImmichAPIKey        bool    `json:"hasImmichAPIKey"`
+	HasDawarichCredentials bool    `json:"hasDawarichCredentials"`
+	HasLibraries           bool    `json:"hasLibraries"`
+	MapMarkerCount         int     `json:"mapMarkerCount"`
 }
 
 type AuthStatusResponse struct {
@@ -247,13 +249,16 @@ type GPXTrackSummary struct {
 }
 
 type GPXMatchResult struct {
-	AssetID          string  `json:"assetID"`
-	FileName         string  `json:"fileName"`
-	Latitude         float64 `json:"latitude"`
-	Longitude        float64 `json:"longitude"`
-	Elevation        float64 `json:"elevation"`
-	TimeGap          int     `json:"timeGap"`
-	IsAlreadyApplied bool    `json:"isAlreadyApplied"`
+	AssetID             string   `json:"assetID"`
+	FileName            string   `json:"fileName"`
+	Latitude            float64  `json:"latitude"`
+	Longitude           float64  `json:"longitude"`
+	Elevation           float64  `json:"elevation"`
+	TimeGap             int      `json:"timeGap"`
+	IsAlreadyApplied    bool     `json:"isAlreadyApplied"`
+	HasExistingLocation bool     `json:"hasExistingLocation"`
+	ExistingLatitude    *float64 `json:"existingLatitude,omitempty"`
+	ExistingLongitude   *float64 `json:"existingLongitude,omitempty"`
 }
 
 type GPXPreviewResponse struct {

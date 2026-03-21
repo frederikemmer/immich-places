@@ -1,4 +1,4 @@
-import {backendFetch, parseJSON} from '@/shared/services/backendApi.fetch';
+import {backendFetch, parseJSON, throwIfErrorResponse} from '@/shared/services/backendApi.fetch';
 import {getClientBackendBaseURL} from '@/utils/client';
 import {isRecord, isString} from '@/utils/typeGuards';
 
@@ -75,13 +75,14 @@ function isAuthUser(value: unknown): value is TAuthUser {
  * @param value - Value to validate.
  * @returns True when value matches `TMeResponse`.
  */
-function isMeResponse(value: unknown): value is TMeResponse {
+export function isMeResponse(value: unknown): value is TMeResponse {
 	if (!isRecord(value)) {
 		return false;
 	}
 	return (
 		isAuthUser(value.user) &&
 		typeof value.hasImmichAPIKey === 'boolean' &&
+		typeof value.hasDawarichCredentials === 'boolean' &&
 		typeof value.hasLibraries === 'boolean' &&
 		typeof value.mapMarkerCount === 'number'
 	);
@@ -98,49 +99,6 @@ function isAuthStatusResponse(value: unknown): value is TAuthStatusResponse {
 		return false;
 	}
 	return typeof value.registrationEnabled === 'boolean';
-}
-
-/**
- * Extracts error message from JSON body when present.
- *
- * @param value - Potential API response payload.
- * @returns Parsed error string or null.
- */
-function extractAPIErrorMessage(value: unknown): string | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-	const maybeError = value.error;
-	return isString(maybeError) && maybeError.trim().length > 0 ? maybeError : null;
-}
-
-/**
- * Parses JSON while tolerating invalid payloads.
- *
- * @param response - Fetch response object.
- * @returns Parsed payload or null on failure.
- */
-async function parseJSONSafe(response: Response): Promise<unknown | null> {
-	try {
-		return await response.json();
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Throws a descriptive error when response status is not `ok`.
- *
- * @param response - Fetch response.
- * @param fallbackPrefix - Fallback message used when no explicit message exists.
- */
-async function throwIfErrorResponse(response: Response, fallbackPrefix: string): Promise<void> {
-	if (response.ok) {
-		return;
-	}
-	const payload = await parseJSONSafe(response);
-	const errorMessage = extractAPIErrorMessage(payload);
-	throw new Error(errorMessage ?? `${fallbackPrefix} (${response.status})`);
 }
 
 /**

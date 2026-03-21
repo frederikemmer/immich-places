@@ -83,8 +83,11 @@ export function useAppProviderState(): TAppProviderState {
 		viewMode,
 		setViewModeAction,
 		selectedAlbumID,
+		startDate,
+		endDate,
 		setGPSFilterAction,
-		selectAlbumAction
+		selectAlbumAction,
+		setDateRangeAction
 	} = useViewDomain();
 
 	const catalogDomain = useCatalogDomain({
@@ -93,6 +96,8 @@ export function useAppProviderState(): TAppProviderState {
 		pageSize,
 		viewMode,
 		selectedAlbumID,
+		startDate,
+		endDate,
 		isReady
 	});
 
@@ -126,6 +131,8 @@ export function useAppProviderState(): TAppProviderState {
 		canRedoLocation,
 		beginLocationBatch,
 		endLocationBatch,
+		gpxStatusFilter,
+		setGPXStatusFilterAction,
 		mapMarkersVersion,
 		bumpMapMarkers
 	} = useSelectionController({onAssetSavedAction, onBatchSavedAction});
@@ -206,7 +213,10 @@ export function useAppProviderState(): TAppProviderState {
 		viewMode,
 		setViewModeAction,
 		selectedAlbumID,
-		selectAlbumAction
+		selectAlbumAction,
+		startDate,
+		endDate,
+		setDateRangeAction
 	});
 
 	const catalogValue = useCatalogValue({
@@ -246,7 +256,9 @@ export function useAppProviderState(): TAppProviderState {
 		canUndoLocation,
 		canRedoLocation,
 		beginLocationBatch,
-		endLocationBatch
+		endLocationBatch,
+		gpxStatusFilter,
+		setGPXStatusFilterAction
 	});
 
 	const uiMapValue = useUIMapValue({

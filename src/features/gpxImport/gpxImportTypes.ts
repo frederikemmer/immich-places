@@ -19,6 +19,9 @@ export type TGPXMatchResult = {
 	elevation: number;
 	timeGap: number;
 	isAlreadyApplied: boolean;
+	hasExistingLocation: boolean;
+	existingLatitude?: number;
+	existingLongitude?: number;
 	trackName?: string;
 };
 

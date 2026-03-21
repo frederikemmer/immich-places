@@ -236,7 +236,8 @@ function isGPXMatchResult(value: unknown): value is TGPXMatchResult {
 		isFiniteNumber(value.longitude) &&
 		isFiniteNumber(value.elevation) &&
 		isFiniteNumber(value.timeGap) &&
-		typeof value.isAlreadyApplied === 'boolean'
+		typeof value.isAlreadyApplied === 'boolean' &&
+		typeof value.hasExistingLocation === 'boolean'
 	);
 }
 
