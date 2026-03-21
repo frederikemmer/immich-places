@@ -7,90 +7,149 @@ import (
 	"time"
 )
 
-const (
-	maxGeocodeCacheSize = 10000
-	hereReverseURL      = "https://revgeocode.search.hereapi.com/v1/revgeocode"
-)
+const maxGeocodeCacheSize = 10000
 
-// GeocodeProvider abstracts geocoding so different services
-// (Nominatim, HERE, ...) can be swapped via configuration.
 type GeocodeProvider interface {
 	ReverseGeocode(ctx context.Context, lat, lon float64) (string, error)
 	ForwardSearch(ctx context.Context, query string, limit int, lang string) ([]SearchResult, error)
 }
 
-// fallbackGeocoder tries the primary provider first; if the result looks like
-// raw coordinates or "Unknown" it falls back to the secondary provider.
-// This saves quota on paid APIs like HERE.
-type fallbackGeocoder struct {
-	primary   GeocodeProvider
-	secondary GeocodeProvider
+type namedProvider struct {
+	name     string
+	provider GeocodeProvider
 }
 
-func (f *fallbackGeocoder) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
-	label, err := f.primary.ReverseGeocode(ctx, lat, lon)
-	if err != nil {
-		log.Printf("[geocode] Reverse geocode: Nominatim failed, trying HERE: %v", err)
-		return f.secondary.ReverseGeocode(ctx, lat, lon)
-	}
-	if isWeakResult(label, lat, lon) {
-		better, secErr := f.secondary.ReverseGeocode(ctx, lat, lon)
-		if secErr != nil {
-			log.Printf("[geocode] Reverse geocode: HERE failed: %v", secErr)
+type chainGeocoder struct {
+	chain []namedProvider
+}
+
+func (c *chainGeocoder) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+	var bestLabel string
+	for _, np := range c.chain {
+		label, err := np.provider.ReverseGeocode(ctx, lat, lon)
+		if err != nil {
+			log.Printf("[geocode] Reverse geocode: %s failed: %v", np.name, err)
+			continue
+		}
+		if bestLabel == "" {
+			bestLabel = label
+		}
+		if !isWeakResult(label, lat, lon) {
 			return label, nil
 		}
-		if !isWeakResult(better, lat, lon) {
-			return better, nil
-		}
+		log.Printf("[geocode] Reverse geocode: %s returned weak result, trying next", np.name)
 	}
-	return label, nil
+	if bestLabel != "" {
+		return bestLabel, nil
+	}
+	return formatCoords(lat, lon), nil
 }
 
-func (f *fallbackGeocoder) ForwardSearch(ctx context.Context, query string, limit int, lang string) ([]SearchResult, error) {
-	results, err := f.primary.ForwardSearch(ctx, query, limit, lang)
-	if err != nil {
-		log.Printf("[geocode] Forward search: Nominatim failed, trying HERE: %v", err)
-		return f.secondary.ForwardSearch(ctx, query, limit, lang)
-	}
-	if len(results) == 0 {
-		log.Printf("[geocode] Forward search: Nominatim returned 0 results for %q, trying HERE", query)
-		fallbackResults, fallbackErr := f.secondary.ForwardSearch(ctx, query, limit, lang)
-		if fallbackErr != nil {
-			return nil, fallbackErr
+func (c *chainGeocoder) ForwardSearch(ctx context.Context, query string, limit int, lang string) ([]SearchResult, error) {
+	var lastErr error
+	for _, np := range c.chain {
+		results, err := np.provider.ForwardSearch(ctx, query, limit, lang)
+		if err != nil {
+			log.Printf("[geocode] Forward search: %s failed: %v", np.name, err)
+			lastErr = err
+			continue
 		}
-		log.Printf("[geocode] Forward search: HERE returned %d results for %q", len(fallbackResults), query)
-		return fallbackResults, nil
+		if len(results) == 0 {
+			log.Printf("[geocode] Forward search: %s returned 0 results for %q, trying next", np.name, query)
+			continue
+		}
+		log.Printf("[geocode] Forward search: %s returned %d results", np.name, len(results))
+		return results, nil
 	}
-	log.Printf("[geocode] Forward search: Nominatim returned %d results", len(results))
-	return results, nil
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, nil
 }
 
-// isWeakResult returns true when the geocode label is just formatted
-// coordinates or the literal "Unknown" -- meaning the provider had no
-// real data for that location.
 func isWeakResult(label string, lat, lon float64) bool {
 	if label == "Unknown" {
 		return true
 	}
-	coords := formatCoords(lat, lon)
-	return strings.TrimSpace(label) == strings.TrimSpace(coords)
+	return strings.TrimSpace(label) == formatCoords(lat, lon)
 }
 
-func newGeocodeProvider(provider, apiKey string, timeout time.Duration) GeocodeProvider {
+type geocodeKeys struct {
+	here   string
+	google string
+	legacy string
+}
+
+func resolveKey(provider string, keys geocodeKeys) string {
 	switch provider {
 	case "here":
-		if apiKey == "" {
-			log.Fatal("GEOCODE_API_KEY is required when GEOCODE_PROVIDER=here")
+		if keys.here != "" {
+			return keys.here
 		}
-		// Nominatim first, HERE as fallback to save quota
-		return &fallbackGeocoder{
-			primary:   newNominatimClient(timeout),
-			secondary: newHereClient(apiKey, timeout),
+		return keys.legacy
+	case "google":
+		if keys.google != "" {
+			return keys.google
 		}
-	case "nominatim", "":
-		return newNominatimClient(timeout)
+		return keys.legacy
 	default:
-		log.Fatalf("Unknown GEOCODE_PROVIDER %q — supported: nominatim, here", provider)
-		return nil
+		return ""
 	}
+}
+
+func describeProvider(p GeocodeProvider) string {
+	switch v := p.(type) {
+	case *chainGeocoder:
+		names := make([]string, len(v.chain))
+		for i, np := range v.chain {
+			names[i] = np.name
+		}
+		return strings.Join(names, " -> ")
+	case *NominatimClient:
+		return "Nominatim"
+	default:
+		return "unknown"
+	}
+}
+
+func newGeocodeProvider(providerStr string, keys geocodeKeys, timeout time.Duration) GeocodeProvider {
+	providerStr = strings.TrimSpace(providerStr)
+	if providerStr == "" || providerStr == "nominatim" {
+		return newNominatimClient(timeout)
+	}
+
+	chain := []namedProvider{
+		{name: "Nominatim", provider: newNominatimClient(timeout)},
+	}
+
+	providers := strings.Split(providerStr, ",")
+	for _, p := range providers {
+		p = strings.TrimSpace(p)
+		switch p {
+		case "nominatim":
+			continue
+		case "here":
+			apiKey := resolveKey(p, keys)
+			if apiKey == "" {
+				log.Fatal("HERE_API_KEY (or GEOCODE_API_KEY) is required when using here provider")
+			}
+			chain = append(chain, namedProvider{
+				name:     "HERE",
+				provider: newHereClient(apiKey, timeout),
+			})
+		case "google":
+			apiKey := resolveKey(p, keys)
+			if apiKey == "" {
+				log.Fatal("GOOGLE_API_KEY (or GEOCODE_API_KEY) is required when using google provider")
+			}
+			chain = append(chain, namedProvider{
+				name:     "Google",
+				provider: newGoogleMapsClient(apiKey, timeout),
+			})
+		default:
+			log.Fatalf("Unknown geocode provider %q — supported: nominatim, here, google", p)
+		}
+	}
+
+	return &chainGeocoder{chain: chain}
 }
