@@ -92,23 +92,20 @@ func (s *SyncService) cancelUserSyncWithTimeout(userID string, waitTimeout time.
 	cancel := s.userCancels[userID]
 	syncing := s.userSyncing[userID]
 	s.mu.Unlock()
-	if syncing && cancel == nil {
+	if !syncing {
+		return true
+	}
+	if cancel == nil {
 		return false
 	}
-	if cancel != nil {
-		cancel()
-	}
+	cancel()
 	deadline := time.Now().Add(waitTimeout)
 	for {
 		s.mu.Lock()
-		syncing := s.userSyncing[userID]
-		cancel := s.userCancels[userID]
+		stillSyncing := s.userSyncing[userID]
 		s.mu.Unlock()
-		if !syncing {
+		if !stillSyncing {
 			return true
-		}
-		if cancel == nil {
-			return false
 		}
 		if time.Now().After(deadline) {
 			return false
