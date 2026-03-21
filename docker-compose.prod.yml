@@ -16,6 +16,7 @@ services:
             - '8082'
         environment:
             - IMMICH_URL=${IMMICH_URL}
+            - IMMICH_EXTERNAL_URL=${IMMICH_EXTERNAL_URL:-}
             - ENCRYPTION_KEY=${ENCRYPTION_KEY}
             - REGISTRATION_ENABLED=${REGISTRATION_ENABLED:-true}
             - SYNC_INTERVAL_MS=${SYNC_INTERVAL_MS:-300000}
@@ -23,9 +24,12 @@ services:
             - TRUST_PROXY_TLS=${TRUST_PROXY_TLS:-true}
             - ALLOW_INSECURE=${ALLOW_INSECURE:-false}
             - DEFAULT_TIMEZONE=${DEFAULT_TIMEZONE:-}
-            - GEOCODE_PROVIDER=${GEOCODE_PROVIDER:-nominatim}
+            - GEOCODE_PROVIDER=${GEOCODE_PROVIDER:-nominatim} # comma-separated chain, e.g. "here,google"
+            - HERE_API_KEY=${HERE_API_KEY:-}
+            - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
             - GEOCODE_API_KEY=${GEOCODE_API_KEY:-}
             - GEOCODE_TIMEOUT=${GEOCODE_TIMEOUT:-10}
+            - DAWARICH_URL=${DAWARICH_URL:-}
         volumes:
             - ${BACKEND_DATA_VOLUME:-backend-data}:/data
         restart: unless-stopped
