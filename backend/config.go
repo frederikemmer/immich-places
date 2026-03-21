@@ -43,6 +43,10 @@ func loadConfig() (*Config, error) {
 		return nil, fmt.Errorf("SYNC_INTERVAL_MS must be > 0, got %d", cfg.SyncIntervalMS)
 	}
 
+	if cfg.GeocodeTimeoutSecs <= 0 {
+		return nil, fmt.Errorf("GEOCODE_TIMEOUT must be > 0, got %d", cfg.GeocodeTimeoutSecs)
+	}
+
 	if !cfg.TrustProxyTLS && !cfg.AllowInsecure {
 		return nil, fmt.Errorf("TRUST_PROXY_TLS is false and no TLS is configured; set ALLOW_INSECURE=true to run without TLS")
 	}

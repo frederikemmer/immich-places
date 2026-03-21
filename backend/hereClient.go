@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // HereClient implements GeocodeProvider using the HERE Geocoding & Search API v1.
@@ -16,6 +17,7 @@ type HereClient struct {
 	httpClient *http.Client
 	cache      map[string]string
 	cacheMu    sync.Mutex
+	limiter    *rate.Limiter
 }
 
 func newHereClient(apiKey string, timeout time.Duration) *HereClient {
@@ -23,6 +25,7 @@ func newHereClient(apiKey string, timeout time.Duration) *HereClient {
 		apiKey:     apiKey,
 		httpClient: &http.Client{Timeout: timeout},
 		cache:      make(map[string]string),
+		limiter:    rate.NewLimiter(rate.Every(100*time.Millisecond), 5),
 	}
 }
 
@@ -52,6 +55,10 @@ func (h *HereClient) ReverseGeocode(ctx context.Context, lat, lon float64) (stri
 	}
 	h.cacheMu.Unlock()
 
+	if err := h.limiter.Wait(ctx); err != nil {
+		return "", fmt.Errorf("HERE rate limiter: %w", err)
+	}
+
 	reqURL := fmt.Sprintf(
 		"%s?at=%f,%f&apiKey=%s",
 		hereReverseURL, lat, lon, h.apiKey,
@@ -59,27 +66,25 @@ func (h *HereClient) ReverseGeocode(ctx context.Context, lat, lon float64) (stri
 
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("HERE request build: %w", err)
 	}
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("HERE request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		log.Printf("HERE API rate limited (429)")
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("HERE API rate limited (429)")
 	}
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("HERE reverse geocode returned status %d", resp.StatusCode)
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("HERE reverse geocode returned status %d", resp.StatusCode)
 	}
 
 	var result hereReverseResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return formatCoords(lat, lon), nil
+		return "", fmt.Errorf("HERE response decode: %w", err)
 	}
 
 	if len(result.Items) == 0 {
