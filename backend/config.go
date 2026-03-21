@@ -20,9 +20,11 @@ type Config struct {
 	EncryptionKey       string `env:"ENCRYPTION_KEY,notEmpty"`
 	DawarichURL         string `env:"DAWARICH_URL"`
 	DefaultTimezone     string `env:"DEFAULT_TIMEZONE"`
-	GeocodeProvider    string `env:"GEOCODE_PROVIDER" envDefault:"nominatim"`
-	GeocodeAPIKey      string `env:"GEOCODE_API_KEY"`
-	GeocodeTimeoutSecs int    `env:"GEOCODE_TIMEOUT" envDefault:"10"`
+	GeocodeProvider     string `env:"GEOCODE_PROVIDER" envDefault:"nominatim"`
+	GeocodeAPIKey       string `env:"GEOCODE_API_KEY"`
+	HereAPIKey          string `env:"HERE_API_KEY"`
+	GoogleAPIKey        string `env:"GOOGLE_API_KEY"`
+	GeocodeTimeoutSecs  int    `env:"GEOCODE_TIMEOUT" envDefault:"10"`
 
 	defaultTimezoneLocation *time.Location
 }

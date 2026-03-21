@@ -1001,7 +1001,7 @@ type mockGeocoder struct {
 	callCount      int
 }
 
-func (m *mockGeocoder) ReverseGeocode(_ context.Context, _, _ float64) (string, error) {
+func (m *mockGeocoder) ReverseGeocode(_ context.Context, _, _ float64, _ string) (string, error) {
 	return "Mock Location", nil
 }
 

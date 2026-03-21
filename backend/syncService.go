@@ -416,7 +416,7 @@ func (s *SyncService) enrichFrequentLocationLabels(ctx context.Context, userID s
 		g.Go(func() error {
 			geocodeCtx, geocodeCancel := context.WithTimeout(ctx, 20*time.Second)
 			defer geocodeCancel()
-			label, err := s.geocoder.ReverseGeocode(geocodeCtx, clusters[i].Latitude, clusters[i].Longitude)
+			label, err := s.geocoder.ReverseGeocode(geocodeCtx, clusters[i].Latitude, clusters[i].Longitude, "en")
 			if err != nil {
 				log.Printf("Failed to geocode cluster: %v", err)
 				return nil

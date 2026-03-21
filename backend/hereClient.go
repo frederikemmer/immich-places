@@ -11,7 +11,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// HereClient implements GeocodeProvider using the HERE Geocoding & Search API v1.
+const hereReverseURL = "https://revgeocode.search.hereapi.com/v1/revgeocode"
+
 type HereClient struct {
 	apiKey     string
 	httpClient *http.Client
@@ -29,8 +30,6 @@ func newHereClient(apiKey string, timeout time.Duration) *HereClient {
 	}
 }
 
-// hereReverseResponse models the relevant fields from
-// GET https://revgeocode.search.hereapi.com/v1/revgeocode
 type hereReverseResponse struct {
 	Items []struct {
 		Title   string `json:"title"`
@@ -45,7 +44,7 @@ type hereReverseResponse struct {
 	} `json:"items"`
 }
 
-func (h *HereClient) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+func (h *HereClient) ReverseGeocode(ctx context.Context, lat, lon float64, lang string) (string, error) {
 	key := fmt.Sprintf("%.2f,%.2f", lat, lon)
 
 	h.cacheMu.Lock()
@@ -59,9 +58,12 @@ func (h *HereClient) ReverseGeocode(ctx context.Context, lat, lon float64) (stri
 		return "", fmt.Errorf("HERE rate limiter: %w", err)
 	}
 
+	if lang == "" {
+		lang = "en"
+	}
 	reqURL := fmt.Sprintf(
-		"%s?at=%f,%f&apiKey=%s",
-		hereReverseURL, lat, lon, h.apiKey,
+		"%s?at=%f,%f&lang=%s&apiKey=%s",
+		hereReverseURL, lat, lon, lang, h.apiKey,
 	)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
