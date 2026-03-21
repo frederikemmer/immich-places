@@ -87,6 +87,7 @@ export function useDawarich(hasCredentials: boolean): TUseDawarichReturn {
 				return {...prev, isLoading: false, tracks};
 			});
 		} catch (err) {
+			console.error('[useDawarich] loadTracks error:', err);
 			setState(prev => {
 				if (prev.step === 'previewing') {
 					return prev;

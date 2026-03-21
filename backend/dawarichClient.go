@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -121,7 +122,11 @@ func (c *DawarichClient) getTrackPoints(ctx context.Context, trackID int) ([]Daw
 			break
 		}
 		totalPages, err := strconv.Atoi(totalPagesStr)
-		if err != nil || page >= totalPages {
+		if err != nil {
+			log.Printf("Dawarich: non-numeric X-Total-Pages header %q for track %d", totalPagesStr, trackID)
+			break
+		}
+		if page >= totalPages {
 			break
 		}
 		page++

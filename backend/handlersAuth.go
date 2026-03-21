@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -191,17 +192,27 @@ func (h *AuthHandlers) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, buildMeResponse(r.Context(), h.db, user))
+	writeMeResponse(w, r, h.db, user)
 }
 
-func buildMeResponse(ctx context.Context, db *Database, user *UserRow) TMeResponse {
+func writeMeResponse(w http.ResponseWriter, r *http.Request, db *Database, user *UserRow) {
+	resp, err := buildMeResponse(r.Context(), db, user)
+	if err != nil {
+		log.Printf("buildMeResponse: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func buildMeResponse(ctx context.Context, db *Database, user *UserRow) (TMeResponse, error) {
 	hasLibAccess, err := db.getSyncState(ctx, user.ID, "hasLibraryAccess")
 	if err != nil {
-		log.Printf("buildMeResponse: failed to get hasLibraryAccess for user %s: %v", user.ID, err)
+		return TMeResponse{}, fmt.Errorf("get hasLibraryAccess for user %s: %w", user.ID, err)
 	}
-	markerCount, markerErr := db.countMapMarkers(ctx, user.ID, "", nil)
-	if markerErr != nil {
-		log.Printf("buildMeResponse: failed to count map markers for user %s: %v", user.ID, markerErr)
+	markerCount, err := db.countMapMarkers(ctx, user.ID, "", nil)
+	if err != nil {
+		return TMeResponse{}, fmt.Errorf("count map markers for user %s: %w", user.ID, err)
 	}
 	return TMeResponse{
 		User:                   *user,
@@ -209,7 +220,7 @@ func buildMeResponse(ctx context.Context, db *Database, user *UserRow) TMeRespon
 		HasDawarichCredentials: user.DawarichAPIKey != nil,
 		HasLibraries:           hasLibAccess != nil && *hasLibAccess == "true",
 		MapMarkerCount:         markerCount,
-	}
+	}, nil
 }
 
 func (h *AuthHandlers) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +240,7 @@ func (h *AuthHandlers) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
-	writeJSON(w, http.StatusOK, buildMeResponse(r.Context(), h.db, user))
+	writeMeResponse(w, r, h.db, user)
 }
 
 func (h *AuthHandlers) handleAuthStatus(w http.ResponseWriter, _ *http.Request) {
@@ -324,5 +335,5 @@ func (h *AuthHandlers) handleUpdateSettings(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	writeJSON(w, http.StatusOK, buildMeResponse(r.Context(), h.db, updated))
+	writeMeResponse(w, r, h.db, updated)
 }

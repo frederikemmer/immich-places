@@ -1,13 +1,12 @@
 'use client';
 
-import {addMonths, endOfMonth, format, parseISO, startOfMonth, subMonths, subYears} from 'date-fns';
+import {format, parseISO, startOfMonth, subMonths, subYears} from 'date-fns';
 import {CalendarIcon} from 'lucide-react';
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useState} from 'react';
 
 import {Calendar} from '@/components/ui/calendar';
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
-import {useView} from '@/shared/context/AppContext';
-import {fetchAssetDayCounts} from '@/shared/services/backendApi';
+import {useDayCounts} from '@/features/filterBar/useDayCounts';
 import {cn} from '@/utils/cn';
 
 import type {ComponentProps, ReactElement} from 'react';
@@ -56,13 +55,6 @@ function matchesPreset(preset: TPreset, startDate: string | null, endDate: strin
 	return startDate === preset.startDate && endDate === preset.endDate;
 }
 
-function resolvePresetButtonStyle(isActive: boolean): string {
-	if (isActive) {
-		return buttonActive;
-	}
-	return buttonInactive;
-}
-
 function resolveCustomButtonStyle(open: boolean, hasFilter: boolean, hasPresetMatch: boolean): string {
 	if (open) {
 		return buttonActive;
@@ -89,6 +81,9 @@ function isoToDateRange(startDate: string | null, endDate: string | null): DateR
 }
 
 function formatRangeLabel(startDate: string | null, endDate: string | null): string {
+	if (!startDate && !endDate) {
+		return 'Custom range';
+	}
 	const parts: string[] = [];
 	if (startDate) {
 		parts.push(format(parseISO(startDate), 'MMM d, yyyy'));
@@ -96,64 +91,7 @@ function formatRangeLabel(startDate: string | null, endDate: string | null): str
 	if (endDate) {
 		parts.push(format(parseISO(endDate), 'MMM d, yyyy'));
 	}
-	if (parts.length === 0) {
-		return 'Custom range';
-	}
 	return parts.join(' – ');
-}
-
-function useDayCounts(visibleMonth: Date, open: boolean): Record<string, number> {
-	const {gpsFilter, hiddenFilter, selectedAlbumID} = useView();
-	const [counts, setCounts] = useState<Record<string, number>>({});
-	const abortRef = useRef<AbortController | null>(null);
-
-	const fetchCounts = useCallback(
-		async (month: Date, signal: AbortSignal): Promise<void> => {
-			const rangeStart = format(startOfMonth(subMonths(month, 1)), 'yyyy-MM-dd');
-			const rangeEnd = format(endOfMonth(addMonths(month, 1)), 'yyyy-MM-dd');
-			try {
-				const result = await fetchAssetDayCounts(
-					rangeStart,
-					rangeEnd,
-					gpsFilter,
-					hiddenFilter,
-					selectedAlbumID ?? undefined,
-					{signal}
-				);
-				if (!signal.aborted) {
-					setCounts(result);
-				}
-			} catch {
-				// ignore aborted requests
-			}
-		},
-		[gpsFilter, hiddenFilter, selectedAlbumID]
-	);
-
-	useEffect(() => {
-		if (!open) {
-			return;
-		}
-		abortRef.current?.abort();
-		const controller = new AbortController();
-		abortRef.current = controller;
-		void fetchCounts(visibleMonth, controller.signal);
-		return () => {
-			controller.abort();
-		};
-	}, [visibleMonth, open, fetchCounts]);
-
-	return counts;
-}
-
-function resolveCountOpacity(hasCount: boolean, isHighlighted: boolean): string {
-	if (!hasCount) {
-		return 'opacity-0';
-	}
-	if (isHighlighted) {
-		return 'opacity-80';
-	}
-	return 'opacity-60';
 }
 
 function CountDayButton({
@@ -164,7 +102,12 @@ function CountDayButton({
 }: ComponentProps<typeof DayButton> & {count?: number}): ReactElement {
 	const hasCount = count !== undefined && count > 0;
 	const isHighlighted = modifiers.selected || modifiers.range_start || modifiers.range_end;
-	const countOpacity = resolveCountOpacity(hasCount, isHighlighted);
+	let countOpacity = 'opacity-60';
+	if (!hasCount) {
+		countOpacity = 'opacity-0';
+	} else if (isHighlighted) {
+		countOpacity = 'opacity-80';
+	}
 	return (
 		<button
 			{...props}
@@ -315,7 +258,10 @@ export function DateRangeFilterGroup({
 			<div className={'flex flex-wrap items-center gap-1.5'}>
 				{presets.map(preset => {
 					const isActive = matchesPreset(preset, startDate, endDate);
-					const stateStyle = resolvePresetButtonStyle(isActive);
+					let stateStyle = buttonInactive;
+					if (isActive) {
+						stateStyle = buttonActive;
+					}
 					return (
 						<button
 							key={preset.label}
