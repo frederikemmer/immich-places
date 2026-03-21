@@ -14,13 +14,15 @@ function parseTimeoutSeconds(): number {
 	return DEFAULT_GEOCODE_TIMEOUT_S;
 }
 
+const SUPPORTED_PROVIDERS = new Set(['nominatim', 'here']);
+
 export const GEOCODE_PROVIDER = process.env.GEOCODE_PROVIDER || 'nominatim';
 export const GEOCODE_API_KEY = process.env.GEOCODE_API_KEY || '';
 export const GEOCODE_URL = process.env.GEOCODE_URL || DEFAULT_GEOCODE_URL;
 
-if (GEOCODE_PROVIDER !== 'nominatim') {
+if (!SUPPORTED_PROVIDERS.has(GEOCODE_PROVIDER)) {
 	console.warn(
-		`[geocode] Unknown GEOCODE_PROVIDER "${GEOCODE_PROVIDER}" — only "nominatim" is supported. Falling back to nominatim.`
+		`[geocode] Unknown GEOCODE_PROVIDER "${GEOCODE_PROVIDER}" — supported: ${[...SUPPORTED_PROVIDERS].join(', ')}. Falling back to nominatim.`
 	);
 }
 export const LOCAL_GEOCODE_SEARCH_PATH = '/api/geocode/search';

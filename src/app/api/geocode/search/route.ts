@@ -1,9 +1,12 @@
 import {NextResponse} from 'next/server';
 
 import {searchPlacesFromNominatim} from '@/features/search/nominatim';
+import {searchPlacesFromHere} from '@/features/search/here';
 import {getErrorMessage} from '@/utils/error';
 import {
 	DEFAULT_GEOCODE_RESULT_LIMIT,
+	GEOCODE_API_KEY,
+	GEOCODE_PROVIDER,
 	GEOCODE_QUERY_MAX_LENGTH,
 	GEOCODE_QUERY_MIN_LENGTH,
 	GEOCODE_UPSTREAM_TIMEOUT_MS,
@@ -50,6 +53,35 @@ async function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
 	});
 }
 
+async function doSearch(
+	query: string,
+	signal: AbortSignal,
+	acceptLanguage: string | undefined
+): Promise<TNominatimResult[]> {
+	// Always try Nominatim first (free, unlimited).
+	const nominatimResults = await searchPlacesFromNominatim(query, {
+		baseURL: GEOCODE_URL,
+		limit: MAX_RESULTS,
+		signal,
+		acceptLanguage
+	});
+	if (nominatimResults.length > 0) {
+		return nominatimResults;
+	}
+
+	// Fall back to HERE only when configured and Nominatim returned nothing.
+	if (GEOCODE_PROVIDER === 'here' && GEOCODE_API_KEY) {
+		return searchPlacesFromHere(query, {
+			apiKey: GEOCODE_API_KEY,
+			limit: MAX_RESULTS,
+			signal,
+			acceptLanguage
+		});
+	}
+
+	return nominatimResults;
+}
+
 async function attemptSearch(
 	query: string,
 	clientSignal: AbortSignal,
@@ -66,12 +98,7 @@ async function attemptSearch(
 	clientSignal.addEventListener('abort', handleClientAbort, {once: true});
 
 	try {
-		const results = await searchPlacesFromNominatim(query, {
-			baseURL: GEOCODE_URL,
-			limit: MAX_RESULTS,
-			signal: timeoutController.signal,
-			acceptLanguage
-		});
+		const results = await doSearch(query, timeoutController.signal, acceptLanguage);
 		return {results, hasTimedOut: false};
 	} catch (error) {
 		return {error, hasTimedOut};

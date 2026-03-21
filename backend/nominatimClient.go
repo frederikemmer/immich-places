@@ -13,8 +13,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const maxGeocodeCacheSize = 10000
-
 type NominatimClient struct {
 	httpClient *http.Client
 	cache      map[string]string
@@ -22,15 +20,15 @@ type NominatimClient struct {
 	limiter    *rate.Limiter
 }
 
-func newNominatimClient() *NominatimClient {
+func newNominatimClient(timeout time.Duration) *NominatimClient {
 	return &NominatimClient{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{Timeout: timeout},
 		cache:      make(map[string]string),
 		limiter:    rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 }
 
-func (n *NominatimClient) reverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+func (n *NominatimClient) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
 	key := fmt.Sprintf("%.2f,%.2f", lat, lon)
 
 	n.cacheMu.Lock()
