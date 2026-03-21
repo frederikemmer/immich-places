@@ -55,7 +55,7 @@ type googleAddressComponent struct {
 	Types    []string `json:"types"`
 }
 
-func (g *GoogleMapsClient) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+func (g *GoogleMapsClient) ReverseGeocode(ctx context.Context, lat, lon float64, lang string) (string, error) {
 	key := fmt.Sprintf("%.2f,%.2f", lat, lon)
 
 	g.cacheMu.Lock()
@@ -69,8 +69,12 @@ func (g *GoogleMapsClient) ReverseGeocode(ctx context.Context, lat, lon float64)
 		return "", fmt.Errorf("Google Maps rate limiter: %w", err)
 	}
 
+	if lang == "" {
+		lang = "en"
+	}
 	params := url.Values{}
 	params.Set("latlng", fmt.Sprintf("%f,%f", lat, lon))
+	params.Set("language", lang)
 	params.Set("key", g.apiKey)
 
 	reqURL := googleGeocodeURL + "?" + params.Encode()

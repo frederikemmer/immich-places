@@ -277,7 +277,7 @@ func TestNominatimRetryAfterSeconds(t *testing.T) {
 	originalLimit := client.limiter.Limit()
 
 	ctx := context.Background()
-	_, err := client.ReverseGeocode(ctx, 48.85, 2.35)
+	_, err := client.ReverseGeocode(ctx, 48.85, 2.35, "en")
 	if err == nil {
 		t.Fatal("expected error on 429 response")
 	}
@@ -306,7 +306,7 @@ func TestNominatimRetryAfterHTTPDate(t *testing.T) {
 	originalLimit := client.limiter.Limit()
 
 	ctx := context.Background()
-	_, err := client.ReverseGeocode(ctx, 48.85, 2.35)
+	_, err := client.ReverseGeocode(ctx, 48.85, 2.35, "en")
 	if err == nil {
 		t.Fatal("expected error on 429 response")
 	}

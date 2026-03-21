@@ -29,7 +29,7 @@ func newNominatimClient(timeout time.Duration) *NominatimClient {
 	}
 }
 
-func (n *NominatimClient) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+func (n *NominatimClient) ReverseGeocode(ctx context.Context, lat, lon float64, lang string) (string, error) {
 	key := fmt.Sprintf("%.2f,%.2f", lat, lon)
 
 	n.cacheMu.Lock()
@@ -53,7 +53,10 @@ func (n *NominatimClient) ReverseGeocode(ctx context.Context, lat, lon float64) 
 		return "", fmt.Errorf("Nominatim request build: %w", err)
 	}
 	req.Header.Set("User-Agent", "ImmichPlaces/1.0")
-	req.Header.Set("Accept-Language", "en")
+	if lang == "" {
+		lang = "en"
+	}
+	req.Header.Set("Accept-Language", lang)
 
 	resp, err := n.httpClient.Do(req)
 	if err != nil {

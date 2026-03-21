@@ -10,7 +10,7 @@ import (
 const maxGeocodeCacheSize = 10000
 
 type GeocodeProvider interface {
-	ReverseGeocode(ctx context.Context, lat, lon float64) (string, error)
+	ReverseGeocode(ctx context.Context, lat, lon float64, lang string) (string, error)
 	ForwardSearch(ctx context.Context, query string, limit int, lang string) ([]SearchResult, error)
 }
 
@@ -23,10 +23,10 @@ type chainGeocoder struct {
 	chain []namedProvider
 }
 
-func (c *chainGeocoder) ReverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+func (c *chainGeocoder) ReverseGeocode(ctx context.Context, lat, lon float64, lang string) (string, error) {
 	var bestLabel string
 	for _, np := range c.chain {
-		label, err := np.provider.ReverseGeocode(ctx, lat, lon)
+		label, err := np.provider.ReverseGeocode(ctx, lat, lon, lang)
 		if err != nil {
 			log.Printf("[geocode] Reverse geocode: %s failed: %v", np.name, err)
 			continue
