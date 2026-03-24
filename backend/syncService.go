@@ -631,12 +631,21 @@ func mapImmichToAssetRow(item ImmichAssetResponse) AssetRow {
 		LibraryID:        item.LibraryID,
 	}
 	if item.ExifInfo != nil {
-		asset.Latitude = item.ExifInfo.Latitude
-		asset.Longitude = item.ExifInfo.Longitude
+		if isNullIslandCoord(item.ExifInfo.Latitude, item.ExifInfo.Longitude) {
+			asset.Latitude = nil
+			asset.Longitude = nil
+		} else {
+			asset.Latitude = item.ExifInfo.Latitude
+			asset.Longitude = item.ExifInfo.Longitude
+		}
 		asset.City = item.ExifInfo.City
 		asset.State = item.ExifInfo.State
 		asset.Country = item.ExifInfo.Country
 		asset.DateTimeOriginal = item.ExifInfo.DateTimeOriginal
 	}
 	return asset
+}
+
+func isNullIslandCoord(lat, lon *float64) bool {
+	return lat != nil && lon != nil && *lat == 0 && *lon == 0
 }

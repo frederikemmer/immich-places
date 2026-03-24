@@ -663,8 +663,17 @@ func (d *Database) bulkUpdateAssetLocation(ctx context.Context, userID string, i
 		return nil
 	}
 
+	var latVal, lonVal interface{}
+	if lat == 0 && lon == 0 {
+		latVal = nil
+		lonVal = nil
+	} else {
+		latVal = lat
+		lonVal = lon
+	}
+
 	placeholders := make([]string, len(immichIDs))
-	args := []interface{}{lat, lon, userID}
+	args := []interface{}{latVal, lonVal, userID}
 	for i, id := range immichIDs {
 		placeholders[i] = "?"
 		args = append(args, id)
