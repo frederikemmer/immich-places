@@ -34,7 +34,8 @@ export function MapView(): ReactElement {
 				source: 'gpx-import',
 				targetAssetIDs: [assetID],
 				shouldSkipPendingLocation: true,
-				hasExistingLocation: true
+				hasExistingLocation: true,
+				isAlreadyApplied: true
 			});
 		},
 		[setLocationAction]

@@ -28,8 +28,16 @@ type TPhotoCardMenuProps = {
 export function PhotoCardMenu({asset, isSelected, children}: TPhotoCardMenuProps): ReactElement {
 	const {health} = useBackend();
 	const {assets, loadPageAction, currentPage} = useCatalog();
-	const {selectedAssets, toggleAssetAction, selectAllAction, clearSelectionAction, setLocationAction} =
-		useSelection();
+	const {
+		selectedAssets,
+		toggleAssetAction,
+		selectAllAction,
+		clearSelectionAction,
+		setLocationAction,
+		pendingLocationsByAssetID,
+		beginLocationBatch,
+		endLocationBatch
+	} = useSelection();
 	const {openLightboxAction} = useUIMap();
 
 	const immichURL = health?.immichURL ?? '';
@@ -48,6 +56,59 @@ export function PhotoCardMenu({asset, isSelected, children}: TPhotoCardMenuProps
 	const hasLocation = asset.latitude !== null && asset.longitude !== null;
 	const isBulk = isSelected && selectedAssets.length > 1;
 	const bulkCount = isBulk ? selectedAssets.length : 0;
+
+	function isResettableEntry(assetID: string): boolean {
+		const entry = pendingLocationsByAssetID[assetID];
+		if (!entry) {
+			return false;
+		}
+		return (
+			entry.source === 'gpx-import' &&
+			!entry.isAlreadyApplied &&
+			entry.hasExistingLocation === true &&
+			entry.originalLatitude != null &&
+			entry.originalLongitude != null &&
+			(entry.latitude !== entry.originalLatitude || entry.longitude !== entry.originalLongitude)
+		);
+	}
+
+	function getResettableAssets(): TAssetRow[] {
+		if (isBulk) {
+			return selectedAssets.filter(a => isResettableEntry(a.immichID));
+		}
+		if (isResettableEntry(asset.immichID)) {
+			return [asset];
+		}
+		return [];
+	}
+
+	const resettableAssets = getResettableAssets();
+	const canResetPosition = resettableAssets.length > 0;
+
+	function handleResetPosition(): void {
+		if (resettableAssets.length === 0) {
+			return;
+		}
+
+		beginLocationBatch();
+		try {
+			for (const a of resettableAssets) {
+				const entry = pendingLocationsByAssetID[a.immichID]!;
+				setLocationAction({
+					latitude: entry.originalLatitude!,
+					longitude: entry.originalLongitude!,
+					source: 'gpx-import',
+					targetAssetIDs: [a.immichID],
+					shouldSkipPendingLocation: true,
+					hasExistingLocation: true,
+					isAlreadyApplied: true
+				});
+			}
+		} finally {
+			endLocationBatch();
+		}
+		selectAllAction([]);
+	}
 
 	async function handleToggleHidden(): Promise<void> {
 		try {
@@ -139,6 +200,16 @@ export function PhotoCardMenu({asset, isSelected, children}: TPhotoCardMenuProps
 								});
 							}}>
 							{'Go to location'}
+						</ContextMenu.Item>
+					)}
+					{canResetPosition && (
+						<ContextMenu.Item
+							className={
+								'flex cursor-pointer select-none items-center rounded-sm px-2.5 py-1.5 text-[0.8125rem] text-(--color-text) outline-none data-highlighted:bg-(--color-hover)'
+							}
+							onSelect={handleResetPosition}>
+							{!isBulk && 'Reset position'}
+							{isBulk && `Reset position (${resettableAssets.length})`}
 						</ContextMenu.Item>
 					)}
 					{safeImmichPhotoURL && (

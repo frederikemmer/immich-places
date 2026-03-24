@@ -95,12 +95,15 @@ export function buildNextPendingLocations(
 	for (const assetID of nextAssetIDs) {
 		const existing = prev[assetID];
 		if (existing?.source === 'gpx-import') {
+			const coordinatesChanged =
+				existing.isAlreadyApplied &&
+				(options.latitude !== existing.latitude || options.longitude !== existing.longitude);
 			next[assetID] = createPendingLocation({
 				latitude: options.latitude,
 				longitude: options.longitude,
 				source: 'gpx-import',
 				sourceLabel: existing.sourceLabel,
-				isAlreadyApplied: options.isAlreadyApplied ?? existing.isAlreadyApplied,
+				isAlreadyApplied: coordinatesChanged ? false : (options.isAlreadyApplied ?? existing.isAlreadyApplied),
 				hasExistingLocation: options.hasExistingLocation ?? existing.hasExistingLocation,
 				originalLatitude: options.originalLatitude ?? existing.originalLatitude,
 				originalLongitude: options.originalLongitude ?? existing.originalLongitude
